@@ -1,0 +1,217 @@
+{
+  "guild_id": 0,
+  "timezone": "Asia/Bangkok",
+
+  "channels": {
+    "admin": 0,
+    "review": 0,
+    "log": 0
+  },
+
+  "roles": {
+    "admin": 0,
+    "staff": 0
+  },
+
+  "payment": {
+    "account_name": "ร้าน OLP-Noir",
+    "promptpay": "0xx-xxx-xxxx",
+    "qr_image_url": "",
+    "note": "โอนแล้วส่งภาพสลิปกลับมาที่ DM นี้ได้เลยค่ะ"
+  },
+
+  "_comment_vip_tiers": "ลำดับชั้น VIP เรียงจากต่ำไปสูง ต้องใส่ role_id ให้ครบ ระดับ obsession ห้ามซื้อเอง (purchasable=false) ให้ได้จากแอดมินอนุมัติหรือสะสมครบ 12 เดือนเท่านั้น",
+  "vip_tiers": [
+    {
+      "key": "lace",
+      "name": "VIP Lace",
+      "emoji": "💎",
+      "role_id": 0,
+      "rank": 1,
+      "purchasable": true,
+      "upgrade_to": "desire",
+      "upgrade_streak_months": 12
+    },
+    {
+      "key": "desire",
+      "name": "VIP Desire",
+      "emoji": "🔥",
+      "role_id": 0,
+      "rank": 2,
+      "purchasable": true,
+      "upgrade_to": "obsession",
+      "upgrade_streak_months": 12
+    },
+    {
+      "key": "obsession",
+      "name": "VIP Obsession",
+      "emoji": "👑",
+      "role_id": 0,
+      "rank": 3,
+      "purchasable": false,
+      "upgrade_to": null,
+      "upgrade_streak_months": null
+    }
+  ],
+
+  "vip_packages": [
+    { "key": "lace_month", "tier": "lace", "name": "VIP Lace รายเดือน", "emoji": "💎", "price": 199, "unit": "month", "months": 1 },
+    { "key": "lace_year", "tier": "lace", "name": "VIP Lace รายปี", "emoji": "💎", "price": 2200, "unit": "year", "months": 12 },
+    { "key": "desire_month", "tier": "desire", "name": "VIP Desire รายเดือน", "emoji": "🔥", "price": 399, "unit": "month", "months": 1 },
+    { "key": "desire_year", "tier": "desire", "name": "VIP Desire รายปี", "emoji": "🔥", "price": 4500, "unit": "year", "months": 12 }
+  ],
+
+  "_comment_services": "pricing แต่ละ tier เป็นได้ 3 แบบ: ตัวเลข = ราคาคงที่ | {free_per_month, after_price} = ใช้ฟรี N ครั้ง/เดือน แล้วคิด after_price | {unlimited: true} = ฟรีไม่จำกัด. require_room=true เฉพาะบริการที่ต้องใช้ห้อง (เช่าห้อง Private/VVIP, ห้อง Private+ERP, ดูดวง)",
+  "services": [
+    {
+      "key": "room_private",
+      "name": "เช่าห้อง Private",
+      "emoji": "🏠",
+      "duration_minutes": 60,
+      "require_room": true,
+      "pricing": { "normal": 109, "lace": 109, "desire": 109, "obsession": 109 }
+    },
+    {
+      "key": "room_vvip",
+      "name": "เช่าห้อง Private VVIP",
+      "emoji": "🌟",
+      "duration_minutes": 60,
+      "require_room": true,
+      "pricing": {
+        "normal": 169,
+        "lace": { "free_per_month": 1, "after_price": 169 },
+        "desire": { "free_per_month": 2, "after_price": 169 },
+        "obsession": { "free_per_month": 4, "after_price": 169 }
+      }
+    },
+    {
+      "key": "room_erp",
+      "name": "ห้อง Private + ERP",
+      "emoji": "💑",
+      "duration_minutes": 60,
+      "require_room": true,
+      "pricing": { "normal": 199, "lace": 129, "desire": 99, "obsession": 99 }
+    },
+    {
+      "key": "erp",
+      "name": "ERP",
+      "emoji": "🔥",
+      "duration_minutes": 60,
+      "require_room": false,
+      "pricing": { "normal": 99, "lace": 99, "desire": 99, "obsession": 99 }
+    },
+    {
+      "key": "consult",
+      "name": "ที่ปรึกษา / Private Talk",
+      "emoji": "🧠",
+      "duration_minutes": 30,
+      "require_room": false,
+      "pricing": {
+        "normal": 99,
+        "lace": 69,
+        "desire": 69,
+        "obsession": { "free_per_month": 1, "after_price": 69 }
+      }
+    },
+    {
+      "key": "photo",
+      "name": "ถ่ายภาพกับโฮสต์",
+      "emoji": "🎁",
+      "duration_minutes": 10,
+      "require_room": false,
+      "pricing": {
+        "normal": 79,
+        "lace": { "free_per_month": 1, "after_price": 79 },
+        "desire": { "free_per_month": 1, "after_price": 79 },
+        "obsession": { "unlimited": true }
+      }
+    },
+    {
+      "key": "short_date",
+      "name": "Short date",
+      "emoji": "☕",
+      "duration_minutes": 30,
+      "require_room": false,
+      "pricing": {
+        "normal": 99,
+        "lace": { "free_per_month": 1, "after_price": 99 },
+        "desire": { "free_per_month": 2, "after_price": 99 },
+        "obsession": { "free_per_month": 4, "after_price": 99 }
+      }
+    },
+    {
+      "key": "extend_host",
+      "name": "ต่อเวลาโฮสต์",
+      "emoji": "⏱️",
+      "duration_minutes": 60,
+      "require_room": false,
+      "extend_only": true,
+      "pricing": { "normal": 99, "lace": 99, "desire": 99, "obsession": 99 }
+    },
+    {
+      "key": "drink_shot",
+      "name": "Drink Shot",
+      "emoji": "🥃",
+      "duration_minutes": 10,
+      "require_room": false,
+      "pricing": { "normal": 50, "lace": 50, "desire": 50, "obsession": 50 }
+    },
+    {
+      "key": "tarot",
+      "name": "Tarot / ดูดวง",
+      "emoji": "🔮",
+      "duration_minutes": 30,
+      "require_room": true,
+      "pricing": { "normal": 199, "lace": 199, "desire": 199, "obsession": 199 }
+    }
+  ],
+
+  "rooms": [
+    { "key": "divine_mirror", "name": "The divine mirror" },
+    { "key": "heaven_lounge", "name": "Heaven lounge" },
+    { "key": "velvet_cage", "name": "Velvet cage" },
+    { "key": "the_abyss", "name": "The abyss" },
+    { "key": "golden_pantheon", "name": "The Golden Pantheon" },
+    { "key": "oracle_whisper", "name": "The oracle whisper" },
+    { "key": "chamber_sin", "name": "Chamber sin" }
+  ],
+
+  "discount_codes": {
+    "WELCOME10": { "type": "percent", "value": 10, "note": "ลูกค้าใหม่ ลด 10%" },
+    "OLP50": { "type": "amount", "value": 50, "note": "ลด 50 บาท" }
+  },
+
+  "revenue_share": {
+    "default_staff_percent": 60,
+    "staff_percent": {
+      "123456789012345678": 70
+    }
+  },
+
+  "google_sheets": {
+    "enabled": false,
+    "spreadsheet_id": "",
+    "credentials_file": "credentials.json"
+  },
+
+  "notify": {
+    "loop_seconds": 35,
+    "before_start_minutes": 5,
+    "before_end_minutes": 5
+  },
+
+  "ticket": {
+    "timeout_minutes": 10
+  },
+
+  "review": {
+    "window_hours": 24,
+    "embed_color": "#FF6FA5"
+  },
+
+  "cutoff": {
+    "weekday": 5,
+    "hour": 8,
+    "minute": 0
+  }
+}

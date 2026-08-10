@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.claude/
+
+# ความลับ / ข้อมูลจริง
+.env
+config.json
+credentials.json
+data/
+logs/
