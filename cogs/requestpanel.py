@@ -6,7 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.embeds import COLOR_MAIN
-from core.utils import is_admin
+from core.utils import is_admin, purge_old_panels
 
 
 class RequestPanel(discord.ui.View):
@@ -55,6 +55,9 @@ class RequestPanelCog(commands.Cog):
             await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
             return
 
+        await interaction.response.defer(ephemeral=True)
+        removed = await purge_old_panels(interaction.channel, self.bot.user.id, "olp:request:")
+
         embed = discord.Embed(
             title="✨ OLP-Noir · บริการลูกค้า",
             description=(
@@ -67,7 +70,9 @@ class RequestPanelCog(commands.Cog):
             color=COLOR_MAIN,
         )
         await interaction.channel.send(embed=embed, view=RequestPanel())
-        await interaction.response.send_message("โพสต์ Request Panel แล้วค่ะ", ephemeral=True)
+
+        note = f" (ลบแผงเก่าออก {removed} อัน)" if removed else ""
+        await interaction.followup.send(f"โพสต์ Request Panel แล้วค่ะ{note}", ephemeral=True)
 
 
 async def setup(bot: commands.Bot) -> None:

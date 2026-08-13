@@ -19,6 +19,7 @@ from core.utils import (
     money,
     now_utc,
     parse_start_time,
+    purge_old_panels,
     send_dm,
     to_iso,
 )
@@ -751,18 +752,23 @@ class ReceptionCog(commands.Cog):
         if not self._admin_guard(interaction):
             await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
             return
+        await interaction.response.defer(ephemeral=True)
+        removed = await purge_old_panels(interaction.channel, self.bot.user.id, "olp:panel:")
+
         embed = discord.Embed(
             title="🎛️ Reception Control Panel",
             description=(
                 "แผงควบคุมสำหรับแอดมิน / พนักงานต้อนรับ\n\n"
                 "🧾 **เปิดบิลใหม่** — เลือกลูกค้า พนักงาน บริการ ห้อง แล้วคำนวณราคาอัตโนมัติ\n"
                 "⏱️ **ต่อเวลา** — เปิดบิลต่อเวลาและขยายเวลาจบงานของบิลเดิม\n"
-                "📋 **งานที่กำลังดำเนินอยู่** — ดูสถานะงานทั้งหมด"
+                "📋 **งานที่กำลังดำเนินอยู่** — ดูงานที่ยังไม่จบเวลา"
             ),
             color=COLOR_MAIN,
         )
         await interaction.channel.send(embed=embed, view=ReceptionPanel())
-        await interaction.response.send_message("โพสต์แผงควบคุมแล้วค่ะ", ephemeral=True)
+
+        note = f" (ลบแผงเก่าออก {removed} อัน)" if removed else ""
+        await interaction.followup.send(f"โพสต์แผงควบคุมแล้วค่ะ{note}", ephemeral=True)
 
     bill_group = app_commands.Group(name="bill", description="จัดการบิล")
 

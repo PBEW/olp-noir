@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 
 from core.config import Config, ConfigError
 from core.database import Database
+from core.lockfile import SingleInstanceLock
 from core.sheets import SheetsClient
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -119,10 +120,27 @@ async def main() -> None:
         sys.exit(1)
 
     db_path = str(BASE_DIR / os.getenv("OLP_DB", "data/olp.sqlite3"))
+
+    # กันรันซ้อน: ถ้ามีบอทตัวอื่นอยู่แล้ว ทุกอย่างจะทำงานซ้ำ (DM ซ้ำ, ลงบัญชีซ้ำ, ให้ Role ซ้ำ)
+    lock = SingleInstanceLock(BASE_DIR / "data" / "bot.lock")
+    if not lock.acquire():
+        log.error(
+            "มีบอทตัวอื่นรันอยู่แล้ว จึงไม่เปิดตัวใหม่ซ้ำ\n"
+            "  หากรันซ้อนกัน ลูกค้าจะได้ DM ซ้ำ และบัญชีจะถูกบันทึกซ้ำแถว\n"
+            "  ให้ปิดหน้าต่าง terminal เดิมที่รันบอทอยู่ก่อน (กด Ctrl+C ในหน้าต่างนั้น)\n"
+            "  ตรวจสอบว่ามีตัวไหนรันอยู่บ้างด้วยคำสั่ง PowerShell:\n"
+            "    Get-CimInstance Win32_Process -Filter \"Name like '%python%'\" |"
+            " Select-Object ProcessId, CommandLine"
+        )
+        sys.exit(1)
+
     bot = OLPBot(cfg, db_path)
 
-    async with bot:
-        await bot.start(token)
+    try:
+        async with bot:
+            await bot.start(token)
+    finally:
+        lock.release()
 
 
 if __name__ == "__main__":

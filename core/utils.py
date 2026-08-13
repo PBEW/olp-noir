@@ -146,6 +146,45 @@ async def send_dm(
         return None
 
 
+def _iter_components(message: discord.Message):
+    for row in message.components:
+        children = getattr(row, "children", None)
+        if children is None:
+            yield row
+        else:
+            yield from children
+
+
+async def purge_old_panels(
+    channel: discord.abc.Messageable,
+    bot_user_id: int,
+    custom_id_prefix: str,
+    limit: int = 100,
+) -> int:
+    """ลบแผงเก่าของบอทในห้องนี้ก่อนโพสต์แผงใหม่ (กันแผงซ้อนกันหลายอัน)
+
+    บอทลบข้อความของตัวเองได้เสมอ ไม่ต้องมีสิทธิ์ Manage Messages
+    """
+    removed = 0
+    try:
+        async for message in channel.history(limit=limit):
+            if message.author.id != bot_user_id:
+                continue
+            if not any(
+                (getattr(item, "custom_id", "") or "").startswith(custom_id_prefix)
+                for item in _iter_components(message)
+            ):
+                continue
+            try:
+                await message.delete()
+                removed += 1
+            except discord.HTTPException as exc:
+                log.warning("ลบแผงเก่า (%s) ไม่สำเร็จ: %s", message.id, exc)
+    except discord.HTTPException as exc:
+        log.warning("อ่านประวัติข้อความเพื่อลบแผงเก่าไม่สำเร็จ: %s", exc)
+    return removed
+
+
 async def display_name(bot: discord.Client, guild: discord.Guild | None, user_id: int) -> str:
     if guild is not None:
         member = guild.get_member(user_id)
