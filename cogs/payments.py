@@ -72,7 +72,7 @@ class SlipDecisionButton(
         self.kind = kind
         self.ref_id = ref_id
         approve = action == "ok"
-        reject_label = "ยกเลิกบิล" if kind == "JOB" else "ยกเลิกคำสั่งซื้อ"
+        reject_label = "ปฏิเสธสลิป" if kind == "JOB" else "ปฏิเสธสลิป VIP"
         super().__init__(
             discord.ui.Button(
                 label="ยืนยันสลิปถูกต้อง" if approve else reject_label,
@@ -94,7 +94,26 @@ class SlipDecisionButton(
         if self.action == "ok":
             await cog.approve_slip(interaction, self.kind, self.ref_id)
         else:
-            await cog.reject_slip(interaction, self.kind, self.ref_id)
+            await interaction.response.send_modal(SlipRejectReasonModal(self.kind, self.ref_id))
+
+
+class SlipRejectReasonModal(discord.ui.Modal, title="ปฏิเสธสลิป"):
+    reason = discord.ui.TextInput(
+        label="หมายเหตุ (ถ้ามี)",
+        placeholder="เช่น โอนไม่ครบยอด / สลิปไม่ใช่ของบิลนี้ / สลิปปลอม",
+        style=discord.TextStyle.paragraph,
+        required=False,
+        max_length=300,
+    )
+
+    def __init__(self, kind: str, ref_id: int) -> None:
+        super().__init__()
+        self.kind = kind
+        self.ref_id = ref_id
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        cog: PaymentsCog = interaction.client.get_cog("PaymentsCog")  # type: ignore[assignment]
+        await cog.reject_slip(interaction, self.kind, self.ref_id, str(self.reason).strip())
 
 
 def slip_view(kind: str, ref_id: int) -> discord.ui.View:
@@ -241,10 +260,12 @@ class PaymentsCog(commands.Cog):
 
         await self._finish_admin_message(interaction, msg, COLOR_OK if ok else COLOR_DANGER)
 
-    async def reject_slip(self, interaction: discord.Interaction, kind: str, ref_id: int) -> None:
+    async def reject_slip(
+        self, interaction: discord.Interaction, kind: str, ref_id: int, reason: str = ""
+    ) -> None:
         await interaction.response.defer()
         if kind == "JOB":
-            ok, msg = await self.cancel_job(ref_id, interaction.user)
+            ok, msg = await self.cancel_job(ref_id, interaction.user, reason or None)
         else:
             order = await self.db.get_vip_order(ref_id)
             if order is None:
@@ -252,16 +273,18 @@ class PaymentsCog(commands.Cog):
             else:
                 await self.db.update_vip_order(ref_id, status="CANCELLED")
                 await self.db.clear_pending_slip(order["customer_id"])
-                await send_dm(
-                    self.bot,
-                    order["customer_id"],
-                    embed=discord.Embed(
-                        title="❌ คำสั่งซื้อ VIP ถูกยกเลิก",
-                        description="แอดมินยกเลิกรายการนี้ หากมีข้อสงสัยติดต่อแอดมินได้เลยค่ะ",
-                        color=COLOR_DANGER,
-                    ),
+                note = discord.Embed(
+                    title="❌ คำสั่งซื้อ VIP ถูกยกเลิก",
+                    description="แอดมินยกเลิกรายการนี้ หากมีข้อสงสัยติดต่อแอดมินได้เลยค่ะ",
+                    color=COLOR_DANGER,
                 )
-                ok, msg = True, f"ยกเลิกคำสั่งซื้อ VIP `#{ref_id}` แล้ว โดย {interaction.user.mention}"
+                if reason:
+                    note.add_field(name="เหตุผล", value=reason, inline=False)
+                await send_dm(self.bot, order["customer_id"], embed=note)
+                reason_suffix = f"\nเหตุผล: {reason}" if reason else ""
+                ok, msg = True, (
+                    f"ยกเลิกคำสั่งซื้อ VIP `#{ref_id}` แล้ว โดย {interaction.user.mention}{reason_suffix}"
+                )
 
         await self._finish_admin_message(interaction, msg, COLOR_OK if ok else COLOR_DANGER)
 
@@ -312,7 +335,9 @@ class PaymentsCog(commands.Cog):
         await self.log_job_to_sheet(job)
         return True, f"ยืนยันสลิปแล้ว โดย {admin.mention} — บิล `#{job_id}` สถานะ **PAID**"
 
-    async def cancel_job(self, job_id: int, admin: discord.abc.User) -> tuple[bool, str]:
+    async def cancel_job(
+        self, job_id: int, admin: discord.abc.User, reason: str | None = None
+    ) -> tuple[bool, str]:
         job = await self.db.get_job(job_id)
         if job is None:
             return False, "ไม่พบบิลนี้ในระบบ"
@@ -342,9 +367,37 @@ class PaymentsCog(commands.Cog):
             description=f"บิล `#{job_id}` ถูกยกเลิกโดยแอดมิน ยอดเงินจะไม่ถูกบันทึกลงบัญชีค่ะ",
             color=COLOR_DANGER,
         )
+        if reason:
+            note.add_field(name="เหตุผล", value=reason, inline=False)
         await send_dm(self.bot, job["customer_id"], embed=note)
         await send_dm(self.bot, job["staff_id"], embed=note)
-        return True, f"ยกเลิกบิล `#{job_id}` แล้ว โดย {admin.mention} (ไม่บันทึกลง Google Sheets)"
+
+        reason_suffix = f"\nเหตุผล: {reason}" if reason else ""
+        return True, (
+            f"ยกเลิกบิล `#{job_id}` แล้ว โดย {admin.mention} (ไม่บันทึกลง Google Sheets){reason_suffix}"
+        )
+
+    async def reject_job_by_staff(self, job: dict, staff: discord.abc.User, reason: str) -> None:
+        """พนักงานปฏิเสธงานเพราะแอดมินคีย์บิลผิด — ยกเลิกบิลเงียบๆ (ลูกค้ายังไม่เคยรู้เรื่องบิลนี้)"""
+        await self.db.update_job(job["id"], status="CANCELLED", cancelled_at=to_iso(now_utc()))
+
+        if job.get("quota_services") and job.get("quota_cycle"):
+            await release_quota_for_job(
+                self.db, job["customer_id"], job["quota_services"], job["quota_cycle"]
+            )
+
+        reason_text = f"\nเหตุผล: {reason}" if reason else ""
+        await self.notify_admin(
+            embed=discord.Embed(
+                title="❌ พนักงานปฏิเสธงาน (คีย์บิลผิด)",
+                description=(
+                    f"บิล `#{job['id']}` ถูก {staff.mention} ปฏิเสธ{reason_text}\n"
+                    f"ลูกค้า: <@{job['customer_id']}> · บริการ: {self.cfg.service_names(job['services'])}\n"
+                    "กรุณาตรวจสอบและคีย์บิลใหม่ให้ถูกต้องค่ะ"
+                ),
+                color=COLOR_DANGER,
+            )
+        )
 
     # ----------------------------------------------------- Google Sheets
     async def log_job_to_sheet(self, job: dict) -> None:

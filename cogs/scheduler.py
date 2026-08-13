@@ -25,7 +25,7 @@ from core.utils import (
 
 log = logging.getLogger("olp.scheduler")
 
-RUNNING_STATUSES = ["ACCEPTED", "SLIP_PENDING", "PAID"]
+RUNNING_STATUSES = ["PAID"]  # แจ้งเตือนเวลาเฉพาะบิลที่ชำระเงินแล้วเท่านั้น
 
 
 class SchedulerCog(commands.Cog):

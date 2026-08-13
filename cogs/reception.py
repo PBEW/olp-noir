@@ -54,9 +54,54 @@ class JobAcceptButton(
         await cog.staff_accept(interaction, self.job_id)
 
 
+class JobRejectButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"olp:job_reject:(?P<job_id>\d+)",
+):
+    """ปุ่มให้พนักงานปฏิเสธงาน เผื่อกรณีแอดมินคีย์บิลผิด (ใช้ได้เฉพาะก่อนกดรับงาน)"""
+
+    def __init__(self, job_id: int) -> None:
+        self.job_id = job_id
+        super().__init__(
+            discord.ui.Button(
+                label="ปฏิเสธ (คีย์ผิด)",
+                emoji="❌",
+                style=discord.ButtonStyle.danger,
+                custom_id=f"olp:job_reject:{job_id}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match: re.Match[str]):
+        return cls(int(match["job_id"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
+        cog: ReceptionCog = interaction.client.get_cog("ReceptionCog")  # type: ignore[assignment]
+        await cog.staff_reject_prompt(interaction, self.job_id)
+
+
+class JobRejectReasonModal(discord.ui.Modal, title="ปฏิเสธงาน"):
+    reason = discord.ui.TextInput(
+        label="เหตุผล (ถ้ามี)",
+        placeholder="เช่น คีย์ผิดคน / ผิดบริการ / ผิดเวลา",
+        style=discord.TextStyle.paragraph,
+        required=False,
+        max_length=300,
+    )
+
+    def __init__(self, job_id: int) -> None:
+        super().__init__()
+        self.job_id = job_id
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        cog: ReceptionCog = interaction.client.get_cog("ReceptionCog")  # type: ignore[assignment]
+        await cog.staff_reject(interaction, self.job_id, str(self.reason).strip())
+
+
 def accept_view(job_id: int) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
     view.add_item(JobAcceptButton(job_id))
+    view.add_item(JobRejectButton(job_id))
     return view
 
 
@@ -462,10 +507,11 @@ class ReceptionCog(commands.Cog):
         if not self._admin_guard(interaction):
             await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
             return
+        now = now_utc()
         jobs = [
             job
             for job in await self.db.jobs_by_status(["ACCEPTED", "SLIP_PENDING", "PAID"])
-            if job["job_type"] == "NORMAL"
+            if job["job_type"] == "NORMAL" and from_iso(job["end_time"]) > now
         ]
         if not jobs:
             await interaction.response.send_message(
@@ -481,7 +527,12 @@ class ReceptionCog(commands.Cog):
         if not self._admin_guard(interaction):
             await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
             return
-        jobs = await self.db.jobs_by_status(list(ACTIVE_STATUSES))
+        now = now_utc()
+        jobs = [
+            job
+            for job in await self.db.jobs_by_status(list(ACTIVE_STATUSES))
+            if from_iso(job["end_time"]) > now
+        ]
         if not jobs:
             await interaction.response.send_message("ยังไม่มีงานค้างอยู่ค่ะ", ephemeral=True)
             return
@@ -663,6 +714,35 @@ class ReceptionCog(commands.Cog):
             f"✅ <@{job['staff_id']}> รับงานบิล `#{job_id}` แล้ว — ส่งยอดชำระให้ลูกค้าเรียบร้อย"
         )
 
+    async def staff_reject_prompt(self, interaction: discord.Interaction, job_id: int) -> None:
+        job = await self.db.get_job(job_id)
+        if job is None:
+            await interaction.response.send_message("ไม่พบบิลนี้ค่ะ", ephemeral=True)
+            return
+        if interaction.user.id != job["staff_id"]:
+            await interaction.response.send_message("ปุ่มนี้สำหรับพนักงานที่ถูกจ่ายงานค่ะ", ephemeral=True)
+            return
+        if job["status"] != "PENDING_STAFF":
+            await interaction.response.send_message("บิลนี้ถูกดำเนินการไปแล้วค่ะ", ephemeral=True)
+            return
+        await interaction.response.send_modal(JobRejectReasonModal(job_id))
+
+    async def staff_reject(self, interaction: discord.Interaction, job_id: int, reason: str) -> None:
+        job = await self.db.get_job(job_id)
+        if job is None or interaction.user.id != job["staff_id"] or job["status"] != "PENDING_STAFF":
+            await interaction.response.send_message("บิลนี้ถูกดำเนินการไปแล้วค่ะ", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+        payments = self.bot.get_cog("PaymentsCog")
+        await payments.reject_job_by_staff(job, interaction.user, reason)
+
+        job = await self.db.get_job(job_id)
+        embed = job_embed(self.cfg, job, title="❌ ปฏิเสธงานแล้ว", color=COLOR_DANGER)
+        if reason:
+            embed.add_field(name="เหตุผล", value=reason, inline=False)
+        await interaction.edit_original_response(embed=embed, view=None)
+
     # ------------------------------------------------------ คำสั่ง slash
     panel_group = app_commands.Group(name="panel", description="โพสต์แผงควบคุมของบอท")
 
@@ -701,13 +781,15 @@ class ReceptionCog(commands.Cog):
         )
 
     @bill_group.command(name="cancel", description="ยกเลิกบิล (ไม่บันทึกลง Google Sheets)")
-    @app_commands.describe(job_id="เลขที่บิล")
-    async def bill_cancel(self, interaction: discord.Interaction, job_id: int) -> None:
+    @app_commands.describe(job_id="เลขที่บิล", reason="เหตุผล (ถ้ามี)")
+    async def bill_cancel(
+        self, interaction: discord.Interaction, job_id: int, reason: str | None = None
+    ) -> None:
         if not self._admin_guard(interaction):
             await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
             return
         payments = self.bot.get_cog("PaymentsCog")
-        ok, msg = await payments.cancel_job(job_id, interaction.user)
+        ok, msg = await payments.cancel_job(job_id, interaction.user, reason)
         await interaction.response.send_message(
             embed=discord.Embed(description=msg, color=COLOR_OK if ok else COLOR_DANGER),
             ephemeral=True,
@@ -728,6 +810,6 @@ class ReceptionCog(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    bot.add_dynamic_items(JobAcceptButton)
+    bot.add_dynamic_items(JobAcceptButton, JobRejectButton)
     bot.add_view(ReceptionPanel())
     await bot.add_cog(ReceptionCog(bot))
