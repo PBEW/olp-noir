@@ -60,6 +60,19 @@ class Config:
     def staff_role_id(self) -> int:
         return int(self.get("roles.staff", 0) or 0)
 
+    @property
+    def on_duty_role_id(self) -> int:
+        return int(self.get("roles.on_duty", 0) or 0)
+
+    # ------------------------------------------------------------ attendance
+    @property
+    def attendance_warn_hours(self) -> float:
+        return float(self.get("attendance.warn_hours", 12))
+
+    @property
+    def attendance_auto_close_hours(self) -> float:
+        return float(self.get("attendance.auto_close_hours", 16))
+
     # -------------------------------------------------------------- services
     @property
     def services(self) -> list[dict]:

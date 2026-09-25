@@ -195,6 +195,11 @@ class SchedulerCog(commands.Cog):
 
         payments = self.bot.get_cog("PaymentsCog")
         await payments.notify_admin(embed=summary)
+
+        attendance = self.bot.get_cog("AttendanceCog")
+        if attendance is not None:
+            hours_embed = await attendance.build_hours_summary(previous_start, current_start)
+            await payments.notify_admin(embed=hours_embed)
         log.info("ตัดรอบเรียบร้อย -> %s", new_title)
         return summary
 

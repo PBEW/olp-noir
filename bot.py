@@ -30,6 +30,7 @@ EXTENSIONS = [
     "cogs.reviews",
     "cogs.requestpanel",
     "cogs.scheduler",
+    "cogs.attendance",
     "cogs.dmrouter",
     "cogs.admin",
 ]

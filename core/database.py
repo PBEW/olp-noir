@@ -133,6 +133,20 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT
 );
 
+CREATE TABLE IF NOT EXISTS attendance (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id    INTEGER NOT NULL,
+    user_id     INTEGER NOT NULL,
+    clock_in    TEXT    NOT NULL,
+    clock_out   TEXT,
+    auto_closed INTEGER NOT NULL DEFAULT 0,   -- 1 = บอทปิดให้เพราะลืมกดออกงาน
+    warned      INTEGER NOT NULL DEFAULT 0,   -- 1 = ส่ง DM เตือนลืมออกงานแล้ว
+    edited_by   INTEGER,                      -- แอดมินที่แก้เวลาล่าสุด
+    note        TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance(user_id, clock_out);
+CREATE INDEX IF NOT EXISTS idx_attendance_in ON attendance(clock_in);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_customer ON jobs(customer_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_customer ON tickets(customer_id, status);
@@ -375,6 +389,42 @@ class Database:
 
     async def clear_pending_slip(self, user_id: int) -> None:
         await self.execute("DELETE FROM pending_slips WHERE user_id = ?", (user_id,))
+
+    # ---------------------------------------------------------- attendance
+    async def open_attendance(self, user_id: int) -> dict | None:
+        return await self.fetchone(
+            "SELECT * FROM attendance WHERE user_id = ? AND clock_out IS NULL ORDER BY id DESC LIMIT 1",
+            (user_id,),
+        )
+
+    async def latest_attendance(self, user_id: int) -> dict | None:
+        return await self.fetchone(
+            "SELECT * FROM attendance WHERE user_id = ? ORDER BY clock_in DESC LIMIT 1", (user_id,)
+        )
+
+    async def all_open_attendance(self) -> list[dict]:
+        return await self.fetchall("SELECT * FROM attendance WHERE clock_out IS NULL")
+
+    async def create_attendance(self, guild_id: int, user_id: int, clock_in: str) -> int:
+        return await self.execute(
+            "INSERT INTO attendance (guild_id, user_id, clock_in) VALUES (?, ?, ?)",
+            (guild_id, user_id, clock_in),
+        )
+
+    async def update_attendance(self, row_id: int, **fields: Any) -> None:
+        await self._update("attendance", row_id, fields)
+
+    async def get_attendance(self, row_id: int) -> dict | None:
+        return await self.fetchone("SELECT * FROM attendance WHERE id = ?", (row_id,))
+
+    async def attendance_overlapping(self, start_iso: str, end_iso: str, user_id: int | None = None) -> list[dict]:
+        """กะงานที่คาบเกี่ยวช่วงเวลา [start, end) รวมกะที่ยังไม่ออกงาน"""
+        sql = "SELECT * FROM attendance WHERE clock_in < ? AND (clock_out IS NULL OR clock_out > ?)"
+        params: list[Any] = [end_iso, start_iso]
+        if user_id is not None:
+            sql += " AND user_id = ?"
+            params.append(user_id)
+        return await self.fetchall(sql + " ORDER BY clock_in", params)
 
     # ---------------------------------------------------------------- meta
     async def get_meta(self, key: str, default: str | None = None) -> str | None:
