@@ -164,7 +164,7 @@ class CutoffConfirmView(AdminOnlyView):
 HELP_TEXT = (
     "**แผงที่โพสต์ได้**\n"
     "`/panel reception` แผงรีเซปชั่น (เปิดบิล / ต่อเวลา / งานที่ดำเนินอยู่)\n"
-    "`/panel_request` แผงบริการลูกค้า · `/panel_attendance` แผงลงเวลาพนักงาน · `/panel_admin` แผงนี้\n\n"
+    "`/panel_request` แผงบริการลูกค้า · `/panel_staff` เมนูพนักงาน · `/panel_attendance` แผงลงเวลา · `/panel_admin` แผงนี้\n\n"
     "**บิล**\n"
     "`/bill info` ดูบิล · `/bill paid` ยืนยันชำระด้วยมือ · `/bill cancel` ยกเลิกบิล\n\n"
     "**อื่น ๆ**\n"
