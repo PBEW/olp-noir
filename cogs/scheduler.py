@@ -259,12 +259,15 @@ class SchedulerCog(commands.Cog):
             await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
+        await interaction.followup.send(embed=await self.current_summary(), ephemeral=True)
+
+    async def current_summary(self) -> discord.Embed:
         now_local = dt.datetime.now(self.cfg.tz)
         start = cycle_start_local(now_local, self.cfg)
         embed = await self.build_summary(start, now_local)
         embed.title = "📊 สรุปยอดรอบปัจจุบัน"
         embed.color = COLOR_INFO
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        return embed
 
 
 async def setup(bot: commands.Bot) -> None:

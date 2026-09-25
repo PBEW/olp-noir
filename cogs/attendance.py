@@ -351,18 +351,19 @@ class AttendanceCog(commands.Cog):
     async def my_hours_command(self, interaction: discord.Interaction) -> None:
         await self.send_my_hours(interaction)
 
-    @app_commands.command(name="on_duty", description="ดูว่าตอนนี้พนักงานคนไหนอยู่ในกะบ้าง")
-    async def on_duty_command(self, interaction: discord.Interaction) -> None:
+    async def on_duty_embed(self) -> discord.Embed:
         rows = await self.db.all_open_attendance()
         if not rows:
-            await interaction.response.send_message("ตอนนี้ไม่มีพนักงานอยู่ในกะค่ะ", ephemeral=True)
-            return
+            return discord.Embed(description="ตอนนี้ไม่มีพนักงานอยู่ในกะค่ะ", color=COLOR_MAIN)
         lines = [
             f"• <@{r['user_id']}> — เข้างาน {discord_ts(from_iso(r['clock_in']), 'R')}"
             for r in sorted(rows, key=lambda r: r["clock_in"])
         ]
-        embed = discord.Embed(title="🟢 พนักงานที่อยู่ในกะ", description="\n".join(lines)[:4000], color=COLOR_OK)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return discord.Embed(title="🟢 พนักงานที่อยู่ในกะ", description="\n".join(lines)[:4000], color=COLOR_OK)
+
+    @app_commands.command(name="on_duty", description="ดูว่าตอนนี้พนักงานคนไหนอยู่ในกะบ้าง")
+    async def on_duty_command(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_message(embed=await self.on_duty_embed(), ephemeral=True)
 
     @app_commands.command(name="attendance_report", description="สรุปชั่วโมงงานพนักงานของรอบปัจจุบัน (แอดมิน)")
     async def attendance_report(self, interaction: discord.Interaction) -> None:
@@ -370,11 +371,13 @@ class AttendanceCog(commands.Cog):
             await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
+        await interaction.followup.send(embed=await self.current_hours_embed(), ephemeral=True)
+
+    async def current_hours_embed(self) -> discord.Embed:
         now_local = dt.datetime.now(self.cfg.tz)
-        embed = await self.build_hours_summary(
+        return await self.build_hours_summary(
             cycle_start_local(now_local, self.cfg), now_local, title="🕒 ชั่วโมงงานรอบปัจจุบัน"
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(name="attendance_fix", description="แก้เวลาเข้า/ออกงานของกะล่าสุดของพนักงาน (แอดมิน)")
     @app_commands.describe(
@@ -394,6 +397,17 @@ class AttendanceCog(commands.Cog):
         if not is_admin(interaction.user, self.cfg.admin_role_id):
             await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
             return
+        await self.fix_attendance(interaction, member, clock_in, clock_out, new_shift)
+
+    async def fix_attendance(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+        clock_in: str | None,
+        clock_out: str | None,
+        new_shift: bool = False,
+    ) -> None:
+        """แก้เวลาเข้างาน (ใช้ทั้งจาก /attendance_fix และเมนูแอดมิน) — ผู้เรียกต้องตรวจสิทธิ์แอดมินก่อน"""
         if not clock_in and not clock_out:
             await interaction.response.send_message("ระบุ clock_in หรือ clock_out อย่างน้อย 1 ค่าค่ะ", ephemeral=True)
             return

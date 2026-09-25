@@ -26,7 +26,9 @@ class AdminCog(commands.Cog):
         if not self._guard(interaction):
             await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
             return
+        await interaction.response.send_message(embed=await self.health_embed(), ephemeral=True)
 
+    async def health_embed(self) -> discord.Embed:
         now_local = dt.datetime.now(self.cfg.tz)
         active = await self.db.active_jobs()
         tickets = await self.db.tickets_by_status(["OPEN", "ACTIVE"])
@@ -65,7 +67,7 @@ class AdminCog(commands.Cog):
         embed.add_field(
             name="ระดับ VIP", value="\n".join(tier_lines) or "⚠️ ยังไม่ได้ตั้งค่า", inline=False
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return embed
 
     @app_commands.command(name="reload_config", description="โหลดไฟล์ config.json ใหม่ (แอดมิน)")
     async def reload_config(self, interaction: discord.Interaction) -> None:

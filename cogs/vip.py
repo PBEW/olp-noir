@@ -555,9 +555,15 @@ class VipCog(commands.Cog):
         if not is_admin(interaction.user, self.cfg.admin_role_id):
             await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
             return
-        if self.cfg.vip_tier(tier.value) is None:
+        await self.grant_vip(interaction, member, tier.value, months)
+
+    async def grant_vip(
+        self, interaction: discord.Interaction, member: discord.Member, tier_key: str, months: int
+    ) -> None:
+        """ให้สิทธิ์ VIP ด้วยมือ (ใช้ทั้งจาก /vip_grant และเมนูแอดมิน) — ผู้เรียกต้องตรวจสิทธิ์แอดมินก่อน"""
+        if self.cfg.vip_tier(tier_key) is None:
             await interaction.response.send_message(
-                f"ยังไม่ได้ตั้งค่าระดับ `{tier.value}` ใน config (vip_tiers)", ephemeral=True
+                f"ยังไม่ได้ตั้งค่าระดับ `{tier_key}` ใน config (vip_tiers)", ephemeral=True
             )
             return
 
@@ -566,7 +572,7 @@ class VipCog(commands.Cog):
             new_expiry_local, new_streak, role_note, tier_cfg = await self._apply_grant(
                 guild_id=interaction.guild_id,
                 customer_id=member.id,
-                tier_key=tier.value,
+                tier_key=tier_key,
                 unit="month",
                 months=months,
             )
