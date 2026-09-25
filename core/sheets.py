@@ -46,6 +46,19 @@ SUMMARY_BLOCK = [
 ]
 
 
+ATTENDANCE_SHEET = "Attendance"
+ATTENDANCE_HEADERS = [
+    "กะ ID",
+    "วันที่",
+    "เข้างาน",
+    "ออกงาน",
+    "พนักงาน",
+    "ID พนักงาน",
+    "ชั่วโมง",
+    "หมายเหตุ",
+]
+
+
 class SheetsClient:
     """ห่อ gspread ให้เรียกใช้แบบ async ได้ (gspread เป็น sync ล้วน)"""
 
@@ -127,6 +140,30 @@ class SheetsClient:
 
     def _append_sync(self, sheet_title: str, row: list) -> None:
         ws = self._get_or_create_ws(sheet_title)
+        ws.append_row(row, value_input_option="USER_ENTERED", table_range="A1")
+
+    async def append_attendance_row(self, row: list) -> bool:
+        if not self.ready:
+            return False
+        async with self._lock:
+            try:
+                await asyncio.to_thread(self._append_attendance_sync, row)
+                return True
+            except Exception:  # noqa: BLE001
+                log.exception("บันทึกเวลาเข้างานลง Google Sheets ไม่สำเร็จ")
+                return False
+
+    def _append_attendance_sync(self, row: list) -> None:
+        import gspread
+
+        assert self._spreadsheet is not None
+        try:
+            ws = self._spreadsheet.worksheet(ATTENDANCE_SHEET)
+        except gspread.WorksheetNotFound:
+            ws = self._spreadsheet.add_worksheet(title=ATTENDANCE_SHEET, rows=1000, cols=8)
+            ws.update(values=[ATTENDANCE_HEADERS], range_name="A1")
+            ws.format("A1:H1", {"textFormat": {"bold": True}})
+            ws.freeze(rows=1)
         ws.append_row(row, value_input_option="USER_ENTERED", table_range="A1")
 
     async def create_cycle_sheet(self, title: str) -> bool:

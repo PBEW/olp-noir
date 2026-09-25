@@ -10,7 +10,14 @@
 
   "roles": {
     "admin": 0,
-    "staff": 0
+    "staff": 0,
+    "on_duty": 0
+  },
+
+  "_comment_attendance": "ระบบเข้างานพนักงาน: เตือนทาง DM เมื่อเข้างานนานเกิน warn_hours และบอทปิดกะให้อัตโนมัติเมื่อเกิน auto_close_hours",
+  "attendance": {
+    "warn_hours": 12,
+    "auto_close_hours": 16
   },
 
   "payment": {
