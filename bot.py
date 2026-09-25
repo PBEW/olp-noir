@@ -33,6 +33,7 @@ EXTENSIONS = [
     "cogs.attendance",
     "cogs.dmrouter",
     "cogs.admin",
+    "cogs.adminpanel",
 ]
 
 
