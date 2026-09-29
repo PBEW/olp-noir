@@ -145,6 +145,14 @@ CREATE TABLE IF NOT EXISTS attendance (
     note        TEXT
 );
 
+CREATE TABLE IF NOT EXISTS daily_checkin (
+    day        TEXT    NOT NULL,   -- YYYY-MM-DD (เวลาไทย)
+    user_id    INTEGER NOT NULL,
+    status     TEXT    NOT NULL,   -- IN | OFF
+    checked_at TEXT    NOT NULL,
+    PRIMARY KEY (day, user_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance(user_id, clock_out);
 CREATE INDEX IF NOT EXISTS idx_attendance_in ON attendance(clock_in);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);

@@ -169,7 +169,7 @@ HELP_TEXT = (
     "`/bill info` ดูบิล · `/bill paid` ยืนยันชำระด้วยมือ · `/bill cancel` ยกเลิกบิล\n\n"
     "**อื่น ๆ**\n"
     "`/vip_grant` ให้ VIP · `/attendance_fix` แก้เวลาเข้างาน · `/cutoff` ตัดรอบ · `/summary` สรุปยอด\n"
-    "`/attendance_report` ชั่วโมงงาน · `/on_duty` ใครอยู่ในกะ · `/health` สถานะระบบ · `/reload_config` โหลด config"
+    "`/attendance_report` ชั่วโมงงาน · `/daily_checkin` โพสต์กระดานเช็คชื่อ · `/on_duty` ใครอยู่ในกะ · `/health` สถานะระบบ · `/reload_config` โหลด config"
 )
 
 
