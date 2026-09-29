@@ -96,8 +96,8 @@ class AttendanceCog(commands.Cog):
     def _is_staff(self, member: discord.abc.User) -> bool:
         if is_admin(member, self.cfg.admin_role_id):
             return True
-        role_id = self.cfg.staff_role_id
-        return isinstance(member, discord.Member) and any(r.id == role_id for r in member.roles)
+        role_ids = set(self.cfg.staff_role_ids)
+        return isinstance(member, discord.Member) and any(r.id in role_ids for r in member.roles)
 
     async def _deny_if_not_staff(self, interaction: discord.Interaction) -> bool:
         if self._is_staff(interaction.user):
