@@ -150,9 +150,23 @@ class OpenBillWizard(discord.ui.View):
         self.customer_select.callback = self._on_customer
         self.add_item(self.customer_select)
 
-        self.staff_select = discord.ui.UserSelect(
-            placeholder="💃 เลือกพนักงาน / โฮสต์", min_values=1, max_values=1, row=1
-        )
+        # ถ้าตั้ง roles.staff ไว้ ให้แสดงรายชื่อพนักงานเป็นเมนู (ไม่ต้องพิมพ์ค้นหา ชื่อฟอนต์พิเศษก็เลือกได้)
+        staff = self._staff_members(opener)
+        if 0 < len(staff) <= 25:
+            self.staff_select = discord.ui.Select(
+                placeholder="💃 เลือกพนักงาน / โฮสต์",
+                min_values=1,
+                max_values=1,
+                row=1,
+                options=[
+                    discord.SelectOption(label=m.display_name[:100], value=str(m.id), description=m.name[:100])
+                    for m in staff
+                ],
+            )
+        else:
+            self.staff_select = discord.ui.UserSelect(
+                placeholder="💃 เลือกพนักงาน / โฮสต์ (พิมพ์ชื่อเพื่อค้นหา)", min_values=1, max_values=1, row=1
+            )
         self.staff_select.callback = self._on_staff
         self.add_item(self.staff_select)
 
@@ -203,8 +217,23 @@ class OpenBillWizard(discord.ui.View):
         self.customer_id = self.customer_select.values[0].id
         await self._refresh(interaction)
 
+    def _staff_members(self, opener: discord.Member) -> list[discord.Member]:
+        guild = getattr(opener, "guild", None)
+        role_ids = set(self.cfg.staff_role_ids)
+        if guild is None or not role_ids:
+            return []
+        members = {
+            m.id: m
+            for role_id in role_ids
+            if (role := guild.get_role(role_id)) is not None
+            for m in role.members
+            if not m.bot
+        }
+        return sorted(members.values(), key=lambda m: m.display_name.lower())
+
     async def _on_staff(self, interaction: discord.Interaction) -> None:
-        self.staff_id = self.staff_select.values[0].id
+        value = self.staff_select.values[0]
+        self.staff_id = int(value) if isinstance(value, str) else value.id
         await self._refresh(interaction)
 
     async def _on_services(self, interaction: discord.Interaction) -> None:
