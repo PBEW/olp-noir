@@ -5,7 +5,6 @@
   "channels": {
     "admin": 0,
     "review": 0,
-    "staff_chat": 0,
     "log": 0
   },
 
@@ -17,13 +16,6 @@
 
   "_comment_staff": "roles.staff ใส่ได้หลาย Role เป็น list เช่น [111, 222] — ใช้กับเมนูพนักงาน/เข้างาน และรายชื่อพนักงานตอนเปิดบิล (แสดงได้สูงสุด 25 คน ถ้าเกินจะเปลี่ยนเป็นช่องค้นหา)",
   "_comment_attendance": "ระบบเข้างานพนักงาน: เตือนทาง DM เมื่อเข้างานนานเกิน warn_hours และบอทปิดกะให้อัตโนมัติเมื่อเกิน auto_close_hours",
-  "_comment_daily_checkin": "กระดานเช็คชื่อพนักงานรายวัน โพสต์อัตโนมัติในห้อง channels.staff_chat ทุกวันตามเวลา hour:minute (เวลาไทย)",
-  "daily_checkin": {
-    "enabled": true,
-    "hour": 12,
-    "minute": 0
-  },
-
   "attendance": {
     "warn_hours": 12,
     "auto_close_hours": 16
