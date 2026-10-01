@@ -80,7 +80,7 @@ def payment_embed(cfg: Config, *, title: str, description: str, amount: float) -
         )
 
     qr = cfg.get("payment.qr_image_url")
-    if qr:
+    if qr and str(qr).startswith(("http://", "https://")):
         embed.set_image(url=qr)
 
     embed.set_footer(text=cfg.get("payment.note", "ส่งภาพสลิปกลับมาที่ DM นี้ได้เลยค่ะ"))

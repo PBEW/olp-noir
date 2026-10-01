@@ -50,7 +50,8 @@ class Config:
         return ZoneInfo(self.get("timezone", "Asia/Bangkok"))
 
     def channel_id(self, name: str) -> int:
-        return int(self.get(f"channels.{name}", 0) or 0)
+        raw = str(self.get(f"channels.{name}", 0) or 0).strip()
+        return int(raw) if raw.isdigit() else 0  # ค่าที่ยังไม่ได้กรอก เช่น "XXXXXXXXX" ถือว่าไม่ได้ตั้งค่า
 
     @property
     def admin_role_id(self) -> int:

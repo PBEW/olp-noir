@@ -4,8 +4,8 @@
 
   "channels": {
     "admin": 1554085743175934123,
-    "review": 1450848185101844500,
-    "donate": 0,
+    "review": "XXXXXXXXX",
+    "donate": "XXXXXXXXX",
     "log": 0
   },
 
@@ -29,8 +29,8 @@
 
   "payment": {
     "account_name": "ร้าน OLP-Noir",
-    "promptpay": "0xx-xxx-xxxx",
-    "qr_image_url": "https://media.discordapp.net/attachments/1450841753539186748/1457402705881600226/QR_Code.png?ex=6ab742ca&is=6ab5f14a&hm=a0fbbd0d3104924c40e5eabaddac5baff551c5cf605d969e23537687f8a95e56&=&format=webp&quality=lossless&width=384&height=384",
+    "promptpay": "XXXXXXXXX",
+    "qr_image_url": "XXXXXXXXX",
     "note": "โอนแล้วส่งภาพสลิปกลับมาที่ DM นี้ได้เลยค่ะ"
   },
 
