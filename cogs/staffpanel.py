@@ -79,7 +79,13 @@ class StaffPanelCog(commands.Cog):
         embed.add_field(name="ตั้งแต่", value=fmt_datetime(start, self.cfg.tz), inline=True)
         embed.add_field(name="บิลที่ชำระแล้ว", value=f"{len(jobs)} ใบ", inline=True)
         embed.add_field(name="ยอดบิลรวม", value=money(gross), inline=True)
-        embed.add_field(name="ส่วนแบ่งของคุณ", value=f"**{money(share)}**", inline=False)
+        donated = 0.0
+        donate = self.bot.get_cog("DonateCog")
+        if donate is not None:
+            donated = (await donate.totals_between(start, now_local))["per_staff"].get(interaction.user.id, 0.0)
+        embed.add_field(name="ส่วนแบ่งจากบิล", value=money(share), inline=True)
+        embed.add_field(name="🎁 โดเนทที่ได้รับ", value=money(donated), inline=True)
+        embed.add_field(name="รวมทั้งหมด", value=f"**{money(share + donated)}**", inline=False)
         if jobs:
             lines = [
                 f"`#{j['id']}` {self.cfg.service_names(j['services'])} · แบ่ง {money(j['staff_share'])}"

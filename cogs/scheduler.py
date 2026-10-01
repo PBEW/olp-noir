@@ -238,6 +238,21 @@ class SchedulerCog(commands.Cog):
                 lines.append(f"• **{name}** — {count} บิล · In {money(gross)} · แบ่ง {money(share)}")
             embed.add_field(name="แยกตามพนักงาน", value="\n".join(lines)[:1024], inline=False)
 
+        donate = self.bot.get_cog("DonateCog")
+        if donate is not None:
+            d = await donate.totals_between(start_local, end_local)
+            if d["rows"]:
+                embed.add_field(
+                    name=f"🎁 โดเนท ({len(d['rows'])} รายการ)",
+                    value=f"รวม {money(d['total'])} · ให้โฮสต์ {money(d['staff'])} · เข้าร้าน {money(d['shop'])}",
+                    inline=False,
+                )
+                lines = []
+                for staff_id, amount in sorted(d["per_staff"].items(), key=lambda kv: kv[1], reverse=True):
+                    lines.append(f"• **{await display_name(self.bot, guild, staff_id)}** — {money(amount)}")
+                if lines:
+                    embed.add_field(name="โดเนทแยกตามโฮสต์", value="\n".join(lines)[:1024], inline=False)
+
         url = await self.bot.sheets.spreadsheet_url()
         if url:
             embed.add_field(name="Google Sheets", value=url, inline=False)

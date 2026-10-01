@@ -36,7 +36,7 @@ log = logging.getLogger("olp.payments")
 # --------------------------------------------------------------------- ปุ่ม
 class SlipConfirmButton(
     discord.ui.DynamicItem[discord.ui.Button],
-    template=r"olp:slip_confirm:(?P<kind>JOB|VIP):(?P<ref>\d+)",
+    template=r"olp:slip_confirm:(?P<kind>JOB|VIP|DON):(?P<ref>\d+)",
 ):
     """ปุ่มให้ลูกค้ายืนยันว่าจะส่งสลิปภาพนี้ให้แอดมินตรวจ"""
 
@@ -63,7 +63,7 @@ class SlipConfirmButton(
 
 class SlipDecisionButton(
     discord.ui.DynamicItem[discord.ui.Button],
-    template=r"olp:slip_(?P<action>ok|no):(?P<kind>JOB|VIP):(?P<ref>\d+)",
+    template=r"olp:slip_(?P<action>ok|no):(?P<kind>JOB|VIP|DON):(?P<ref>\d+)",
 ):
     """ปุ่มฝั่งแอดมิน: ยืนยันสลิปถูกต้อง / ยกเลิกบิล"""
 
@@ -72,7 +72,7 @@ class SlipDecisionButton(
         self.kind = kind
         self.ref_id = ref_id
         approve = action == "ok"
-        reject_label = "ปฏิเสธสลิป" if kind == "JOB" else "ปฏิเสธสลิป VIP"
+        reject_label = {"JOB": "ปฏิเสธสลิป", "VIP": "ปฏิเสธสลิป VIP", "DON": "ปฏิเสธสลิปโดเนท"}[kind]
         super().__init__(
             discord.ui.Button(
                 label="ยืนยันสลิปถูกต้อง" if approve else reject_label,
@@ -184,6 +184,8 @@ class PaymentsCog(commands.Cog):
         kind, ref_id = pending["kind"], pending["ref_id"]
         if kind == "JOB":
             await self.db.update_job(ref_id, slip_url=attachment.url)
+        elif kind == "DON":
+            await self.db.update_donation(ref_id, slip_url=attachment.url)
         else:
             await self.db.update_vip_order(ref_id, slip_url=attachment.url)
 
@@ -198,9 +200,12 @@ class PaymentsCog(commands.Cog):
     async def submit_slip_to_admin(
         self, interaction: discord.Interaction, kind: str, ref_id: int
     ) -> None:
-        record = (
-            await self.db.get_job(ref_id) if kind == "JOB" else await self.db.get_vip_order(ref_id)
-        )
+        if kind == "JOB":
+            record = await self.db.get_job(ref_id)
+        elif kind == "DON":
+            record = await self.db.get_donation(ref_id)
+        else:
+            record = await self.db.get_vip_order(ref_id)
         if record is None:
             await interaction.response.send_message("ไม่พบรายการนี้ในระบบค่ะ", ephemeral=True)
             return
@@ -226,6 +231,17 @@ class PaymentsCog(commands.Cog):
                 f"บริการ: {self.cfg.service_names(record['services'])}\n"
                 f"ยอด: **{money(record['total_price'])}**"
             )
+        elif kind == "DON":
+            await self.db.update_donation(ref_id, status="SLIP_PENDING")
+            title = f"🔎 สลิปรอตรวจสอบ — โดเนท #{ref_id}"
+            target = f"<@{record['recipient_id']}>" if record["recipient_id"] else "ร้าน"
+            desc = (
+                f"ผู้โดเนท: <@{record['donor_id']}>" + (" *(ไม่เปิดเผยชื่อ)*" if record["anonymous"] else "") + "\n"
+                f"ให้: {target}\n"
+                f"ยอด: **{money(record['amount'])}**"
+            )
+            if record.get("message"):
+                desc += f"\nข้อความ: {record['message']}"
         else:
             await self.db.update_vip_order(ref_id, status="SLIP_PENDING")
             package = self.cfg.vip_package(record["package_key"])
@@ -254,6 +270,8 @@ class PaymentsCog(commands.Cog):
         await interaction.response.defer()
         if kind == "JOB":
             ok, msg = await self.mark_job_paid(ref_id, interaction.user)
+        elif kind == "DON":
+            ok, msg = await self.bot.get_cog("DonateCog").approve(ref_id, interaction.user)
         else:
             vip = self.bot.get_cog("VipCog")
             ok, msg = await vip.activate_order(ref_id, interaction.user)
@@ -266,6 +284,8 @@ class PaymentsCog(commands.Cog):
         await interaction.response.defer()
         if kind == "JOB":
             ok, msg = await self.cancel_job(ref_id, interaction.user, reason or None)
+        elif kind == "DON":
+            ok, msg = await self.bot.get_cog("DonateCog").reject(ref_id, interaction.user, reason)
         else:
             order = await self.db.get_vip_order(ref_id)
             if order is None:
