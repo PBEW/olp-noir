@@ -1,4 +1,4 @@
-"""ระบบเข้างานพนักงาน: แผงปุ่มเข้า/ออกงาน, Role On Duty, เตือนลืมออกงาน, สรุปชั่วโมง"""
+"""ระบบเข้างานพนักงาน: ปุ่มเข้างานทำงานวันนี้, Role On Duty, ตัดออกงานทุกคนอัตโนมัติประจำวัน, สรุปชั่วโมง"""
 from __future__ import annotations
 
 import datetime as dt
@@ -50,7 +50,7 @@ class AttendancePanel(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.button(
-        label="เข้างาน",
+        label="เข้างานทำงานวันนี้",
         emoji="🟢",
         style=discord.ButtonStyle.success,
         custom_id="olp:attendance:in",
@@ -58,16 +58,6 @@ class AttendancePanel(discord.ui.View):
     async def clock_in(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         cog = interaction.client.get_cog("AttendanceCog")
         await cog.clock_in(interaction)
-
-    @discord.ui.button(
-        label="ออกงาน",
-        emoji="🔴",
-        style=discord.ButtonStyle.danger,
-        custom_id="olp:attendance:out",
-    )
-    async def clock_out(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        cog = interaction.client.get_cog("AttendanceCog")
-        await cog.clock_out(interaction)
 
     @discord.ui.button(
         label="ชั่วโมงของฉัน",
@@ -143,36 +133,12 @@ class AttendanceCog(commands.Cog):
         now = now_utc()
         row_id = await self.db.create_attendance(interaction.guild_id or self.cfg.guild_id, user.id, to_iso(now))
         await interaction.response.send_message(
-            f"🟢 บันทึกเข้างานแล้ว เวลา **{fmt_time(now, self.cfg.tz)}** น. ขอให้เป็นกะที่ดีนะคะ",
+            f"🟢 บันทึกเข้างานวันนี้แล้ว เวลา **{fmt_time(now, self.cfg.tz)}** น. ขอให้เป็นคืนที่ดีนะคะ\n"
+            f"*ไม่ต้องกดออกงาน บอทจะตัดออกงานให้อัตโนมัติตอน {self._cutoff_today():%H:%M} น.*",
             ephemeral=True,
         )
         await self._set_on_duty(interaction.guild, user.id, True)
         await self._notify_admin(f"🟢 <@{user.id}> เข้างาน {discord_ts(now)} (กะ `#{row_id}`)")
-
-    async def clock_out(self, interaction: discord.Interaction) -> None:
-        if await self._deny_if_not_staff(interaction):
-            return
-        user = interaction.user
-        current = await self.db.open_attendance(user.id)
-        if current is None:
-            await interaction.response.send_message(
-                "คุณยังไม่ได้กดเข้างานค่ะ (ถ้าลืมกด แจ้งแอดมินให้แก้เวลาได้นะคะ)", ephemeral=True
-            )
-            return
-
-        now = now_utc()
-        await self.db.update_attendance(current["id"], clock_out=to_iso(now))
-        seconds = (now - from_iso(current["clock_in"])).total_seconds()
-        await interaction.response.send_message(
-            f"🔴 บันทึกออกงานแล้ว เวลา **{fmt_time(now, self.cfg.tz)}** น. · "
-            f"กะนี้ทำงาน **{fmt_hours(seconds)}** ขอบคุณค่ะ",
-            ephemeral=True,
-        )
-        await self._set_on_duty(interaction.guild, user.id, False)
-        await self._notify_admin(
-            f"🔴 <@{user.id}> ออกงาน {discord_ts(now)} · {fmt_hours(seconds)} (กะ `#{current['id']}`)"
-        )
-        await self._log_to_sheet(await self.db.get_attendance(current["id"]))
 
     # ------------------------------------------------------------ ชั่วโมง
     async def hours_by_user(
@@ -237,65 +203,69 @@ class AttendanceCog(commands.Cog):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    # --------------------------------------------------- เตือน/ปิดกะค้าง
-    @tasks.loop(minutes=5)
+    # ------------------------------------------- ตัดออกงานทุกคนประจำวัน
+    def _cutoff_today(self) -> dt.datetime:
+        """เวลาตัดออกงานของวันนี้ (เวลาไทย) ค่าเริ่มต้น 01:00"""
+        now_local = dt.datetime.now(self.cfg.tz)
+        return now_local.replace(
+            hour=self.cfg.attendance_cutoff_hour,
+            minute=self.cfg.attendance_cutoff_minute,
+            second=0,
+            microsecond=0,
+        )
+
+    @tasks.loop(minutes=1)
     async def watch_open_shifts(self) -> None:
         try:
-            await self._check_open_shifts()
+            await self._daily_cutoff()
         except Exception:  # noqa: BLE001 - ไม่ให้ลูปตาย
-            log.exception("ตรวจกะค้างไม่สำเร็จ")
+            log.exception("ตัดออกงานประจำวันไม่สำเร็จ")
 
     @watch_open_shifts.before_loop
     async def before_watch(self) -> None:
         await self.bot.wait_until_ready()
 
-    async def _check_open_shifts(self) -> None:
-        now = now_utc()
-        warn_after = dt.timedelta(hours=self.cfg.attendance_warn_hours)
-        close_after = dt.timedelta(hours=self.cfg.attendance_auto_close_hours)
+    async def _daily_cutoff(self) -> None:
+        cutoff = self._cutoff_today()
+        today = cutoff.date().isoformat()
+        if dt.datetime.now(self.cfg.tz) < cutoff or await self.db.get_meta("attendance_cutoff_last") == today:
+            return
+        await self.db.set_meta("attendance_cutoff_last", today)
+
         guild = self.bot.get_guild(self.cfg.guild_id)
-
         for row in await self.db.all_open_attendance():
-            started = from_iso(row["clock_in"])
-            elapsed = now - started
+            if from_iso(row["clock_in"]) >= cutoff:
+                continue  # เข้างานหลังเวลาตัดของวันนี้ ให้ไปตัดรอบหน้า
+            await self.db.update_attendance(
+                row["id"], clock_out=to_iso(cutoff), auto_closed=1, note="ตัดออกงานอัตโนมัติประจำวัน"
+            )
+            await self._set_on_duty(guild, row["user_id"], False)
+            await self._log_to_sheet(await self.db.get_attendance(row["id"]))
 
-            if elapsed >= close_after:
-                # ปิดที่เวลาเข้างาน + ชั่วโมงเตือน เพื่อไม่ให้ชั่วโมงบวมเกินจริง แอดมินแก้ได้ภายหลัง
-                end = started + warn_after
-                await self.db.update_attendance(
-                    row["id"], clock_out=to_iso(end), auto_closed=1, note="บอทปิดกะอัตโนมัติ (ลืมออกงาน)"
-                )
-                await self._set_on_duty(guild, row["user_id"], False)
-                await send_dm(
-                    self.bot,
-                    row["user_id"],
-                    content=(
-                        f"⚠️ บอทปิดกะ `#{row['id']}` ให้อัตโนมัติ เพราะไม่ได้กดออกงานเกิน "
-                        f"{self.cfg.attendance_auto_close_hours:g} ชม. — ถ้าเวลาไม่ถูกต้อง แจ้งแอดมินให้แก้นะคะ"
-                    ),
-                )
-                await self._notify_admin(
-                    embed=discord.Embed(
-                        title="⚠️ ปิดกะอัตโนมัติ (ลืมออกงาน)",
-                        description=(
-                            f"พนักงาน <@{row['user_id']}> · กะ `#{row['id']}`\n"
-                            f"เข้างาน {discord_ts(started, 'f')} → บันทึกออกงาน {discord_ts(end, 'f')}\n"
-                            f"แก้เวลาได้ด้วย `/attendance_fix`"
-                        ),
-                        color=COLOR_DANGER,
-                    )
-                )
-                await self._log_to_sheet(await self.db.get_attendance(row["id"]))
-            elif elapsed >= warn_after and not row["warned"]:
-                await self.db.update_attendance(row["id"], warned=1)
-                await send_dm(
-                    self.bot,
-                    row["user_id"],
-                    content=(
-                        f"⏰ คุณเข้างานมาแล้ว {fmt_hours(elapsed.total_seconds())} "
-                        f"(ตั้งแต่ {discord_ts(started, 'f')}) ลืมกดออกงานหรือเปล่าคะ?"
-                    ),
-                )
+        await self._notify_admin(embed=await self.night_summary_embed(cutoff))
+        log.info("ตัดออกงานประจำวัน %s", today)
+
+    async def night_summary_embed(self, cutoff: dt.datetime) -> discord.Embed:
+        """รายชื่อคนที่เข้างานในรอบ 24 ชม. ก่อนเวลาตัด"""
+        start = cutoff - dt.timedelta(days=1)
+        rows = await self.db.fetchall(
+            "SELECT * FROM attendance WHERE clock_in >= ? AND clock_in < ? ORDER BY clock_in",
+            (to_iso(start), to_iso(cutoff)),
+        )
+        first_in: dict[int, dt.datetime] = {}
+        for r in rows:
+            first_in.setdefault(r["user_id"], from_iso(r["clock_in"]))
+
+        night = start.date().strftime("%d/%m/%Y")
+        embed = discord.Embed(title=f"📋 สรุปคนเข้างาน · คืนวันที่ {night}", color=COLOR_INFO)
+        if not first_in:
+            embed.description = "คืนนี้ไม่มีพนักงานกดเข้างานค่ะ"
+            return embed
+        embed.description = "\n".join(
+            f"• <@{uid}> — เข้างาน {fmt_time(t, self.cfg.tz)} น." for uid, t in first_in.items()
+        )[:4000]
+        embed.set_footer(text=f"รวม {len(first_in)} คน · ตัดออกงานทุกคนอัตโนมัติแล้ว")
+        return embed
 
     # ------------------------------------------------------------ helpers
     async def _notify_admin(self, content: str | None = None, *, embed: discord.Embed | None = None) -> None:
@@ -304,7 +274,7 @@ class AttendanceCog(commands.Cog):
             await payments.notify_admin(content=content, embed=embed)
 
     async def _log_to_sheet(self, row: dict | None) -> None:
-        if row is None or not row["clock_out"]:
+        if row is None or not row["clock_out"] or not self.bot.sheets.ready:
             return
         tz = self.cfg.tz
         start, end = from_iso(row["clock_in"]), from_iso(row["clock_out"])
@@ -335,10 +305,9 @@ class AttendanceCog(commands.Cog):
         embed = discord.Embed(
             title="🕒 OLP-Noir · ลงเวลาทำงาน",
             description=(
-                "🟢 **เข้างาน** — กดเมื่อเริ่มกะ\n"
-                "🔴 **ออกงาน** — กดเมื่อจบกะ\n"
+                "🟢 **เข้างานทำงานวันนี้** — กดเมื่อมาทำงาน (ไม่ต้องกดออกงาน)\n"
                 "🕒 **ชั่วโมงของฉัน** — ดูชั่วโมงสะสมของรอบนี้\n\n"
-                f"*ลืมกดออกงานเกิน {self.cfg.attendance_warn_hours:g} ชม. บอทจะเตือนทาง DM ค่ะ*"
+                f"*บอทตัดออกงานทุกคนอัตโนมัติตอน {self._cutoff_today():%H:%M} น. ค่ะ*"
             ),
             color=COLOR_MAIN,
         )
