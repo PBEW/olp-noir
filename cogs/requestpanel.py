@@ -44,6 +44,30 @@ class RequestPanel(discord.ui.View):
         await cog.check_vip(interaction)
 
 
+    @discord.ui.button(
+        label="โดเนท",
+        emoji="🎁",
+        style=discord.ButtonStyle.success,
+        custom_id="olp:request:donate",
+        row=1,
+    )
+    async def donate(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        cog = interaction.client.get_cog("DonateCog")
+        await cog.open_donate(interaction)
+
+    @discord.ui.button(
+        label="อันดับผู้โดเนท",
+        emoji="🏆",
+        style=discord.ButtonStyle.secondary,
+        custom_id="olp:request:donate_top",
+        row=1,
+    )
+    async def donate_top(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        cog = interaction.client.get_cog("DonateCog")
+        embed = await cog.leaderboard_embed("month", interaction.guild)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 class RequestPanelCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -64,7 +88,8 @@ class RequestPanelCog(commands.Cog):
                 "เลือกรายการที่ต้องการได้เลยค่ะ ระบบจะติดต่อกลับทาง **DM** ของบอท\n\n"
                 "💬 **สอบถามเจ้าหน้าที่** — คุยกับแอดมินแบบตัวต่อตัวผ่าน DM\n"
                 "💎 **ซื้อ VIP / ต่ออายุ** — เลือกแพ็กเกจ ใส่โค้ดส่วนลด และชำระเงินได้เอง\n"
-                "🔍 **ตรวจสอบสิทธิ์ VIP** — ดูแพ็กเกจและวันหมดอายุของคุณ\n\n"
+                "🔍 **ตรวจสอบสิทธิ์ VIP** — ดูแพ็กเกจและวันหมดอายุของคุณ\n"
+                "🎁 **โดเนท** — สนับสนุนร้านหรือโฮสต์คนโปรด · 🏆 ดูอันดับผู้โดเนทเดือนนี้\n\n"
                 "*กรุณาเปิดรับข้อความ DM จากสมาชิกในเซิร์ฟเวอร์ก่อนใช้งานนะคะ*"
             ),
             color=COLOR_MAIN,

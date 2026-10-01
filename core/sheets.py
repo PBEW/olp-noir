@@ -59,6 +59,22 @@ ATTENDANCE_HEADERS = [
 ]
 
 
+DONATION_SHEET = "Donations"
+DONATION_HEADERS = [
+    "โดเนท ID",
+    "วันเวลา",
+    "ผู้โดเนท",
+    "ID ผู้โดเนท",
+    "ผู้รับ",
+    "ID ผู้รับ",
+    "ยอด",
+    "ส่วนของโฮสต์",
+    "เข้าร้าน",
+    "หมายเหตุ",
+    "ข้อความ",
+]
+
+
 class SheetsClient:
     """ห่อ gspread ให้เรียกใช้แบบ async ได้ (gspread เป็น sync ล้วน)"""
 
@@ -163,6 +179,29 @@ class SheetsClient:
             ws = self._spreadsheet.add_worksheet(title=ATTENDANCE_SHEET, rows=1000, cols=8)
             ws.update(values=[ATTENDANCE_HEADERS], range_name="A1")
             ws.format("A1:H1", {"textFormat": {"bold": True}})
+            ws.freeze(rows=1)
+        ws.append_row(row, value_input_option="USER_ENTERED", table_range="A1")
+
+    async def append_donation_row(self, row: list) -> bool:
+        if not self.ready:
+            return False
+        async with self._lock:
+            try:
+                await asyncio.to_thread(self._append_simple_sync, DONATION_SHEET, DONATION_HEADERS, row)
+                return True
+            except Exception:  # noqa: BLE001
+                log.exception("บันทึกโดเนทลง Google Sheets ไม่สำเร็จ")
+                return False
+
+    def _append_simple_sync(self, title: str, headers: list[str], row: list) -> None:
+        import gspread
+
+        assert self._spreadsheet is not None
+        try:
+            ws = self._spreadsheet.worksheet(title)
+        except gspread.WorksheetNotFound:
+            ws = self._spreadsheet.add_worksheet(title=title, rows=1000, cols=len(headers))
+            ws.update(values=[headers], range_name="A1")
             ws.freeze(rows=1)
         ws.append_row(row, value_input_option="USER_ENTERED", table_range="A1")
 

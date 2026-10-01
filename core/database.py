@@ -145,6 +145,25 @@ CREATE TABLE IF NOT EXISTS attendance (
     note        TEXT
 );
 
+CREATE TABLE IF NOT EXISTS donations (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id     INTEGER NOT NULL,
+    donor_id     INTEGER NOT NULL,
+    recipient_id INTEGER,                    -- NULL = โดเนทให้ร้าน
+    amount       REAL    NOT NULL,
+    message      TEXT,
+    anonymous    INTEGER NOT NULL DEFAULT 0,
+    staff_share  REAL    NOT NULL DEFAULT 0,
+    shop_share   REAL    NOT NULL DEFAULT 0,
+    status       TEXT    NOT NULL DEFAULT 'AWAITING_PAYMENT',  -- AWAITING_PAYMENT | SLIP_PENDING | PAID | CANCELLED
+    slip_url     TEXT,
+    sheet_logged INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT    NOT NULL,
+    paid_at      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_donations_paid ON donations(status, paid_at);
+
 CREATE TABLE IF NOT EXISTS daily_checkin (
     day        TEXT    NOT NULL,   -- YYYY-MM-DD (เวลาไทย)
     user_id    INTEGER NOT NULL,
@@ -433,6 +452,24 @@ class Database:
             sql += " AND user_id = ?"
             params.append(user_id)
         return await self.fetchall(sql + " ORDER BY clock_in", params)
+
+    # ----------------------------------------------------------- donations
+    async def create_donation(self, **fields: Any) -> int:
+        cols = ", ".join(fields)
+        holders = ", ".join("?" for _ in fields)
+        return await self.execute(f"INSERT INTO donations ({cols}) VALUES ({holders})", tuple(fields.values()))
+
+    async def get_donation(self, donation_id: int) -> dict | None:
+        return await self.fetchone("SELECT * FROM donations WHERE id = ?", (donation_id,))
+
+    async def update_donation(self, donation_id: int, **fields: Any) -> None:
+        await self._update("donations", donation_id, fields)
+
+    async def donations_paid_between(self, start_iso: str, end_iso: str) -> list[dict]:
+        return await self.fetchall(
+            "SELECT * FROM donations WHERE status = 'PAID' AND paid_at >= ? AND paid_at < ? ORDER BY paid_at",
+            (start_iso, end_iso),
+        )
 
     # ---------------------------------------------------------------- meta
     async def get_meta(self, key: str, default: str | None = None) -> str | None:

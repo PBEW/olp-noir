@@ -5,6 +5,7 @@
   "channels": {
     "admin": 0,
     "review": 0,
+    "donate": 0,
     "log": 0
   },
 
@@ -15,6 +16,12 @@
   },
 
   "_comment_staff": "roles.staff ใส่ได้หลาย Role เป็น list เช่น [111, 222] — ใช้กับเมนูพนักงาน/เข้างาน และรายชื่อพนักงานตอนเปิดบิล (แสดงได้สูงสุด 25 คน ถ้าเกินจะเปลี่ยนเป็นช่องค้นหา)",
+  "_comment_donate": "โดเนท: channels.donate = ห้องประกาศขอบคุณ (0 = ไม่ประกาศ), staff_percent = % ที่โฮสต์ได้เมื่อโดเนทให้โฮสต์โดยตรง (ที่เหลือเข้าร้าน)",
+  "donate": {
+    "min_amount": 20,
+    "staff_percent": 100
+  },
+
   "_comment_attendance": "ระบบเข้างานพนักงาน: เตือนทาง DM เมื่อเข้างานนานเกิน warn_hours และบอทปิดกะให้อัตโนมัติเมื่อเกิน auto_close_hours",
   "attendance": {
     "warn_hours": 12,
