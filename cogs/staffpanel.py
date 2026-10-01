@@ -1,4 +1,4 @@
-"""เมนูพนักงาน: แผงปุ่มค้างในห้อง รวมเข้า/ออกงาน ชั่วโมง รายได้ และงานของฉันไว้ที่เดียว"""
+"""เมนูพนักงาน: แผงปุ่มค้างในห้อง รวมเข้างาน ชั่วโมง รายได้ และงานของฉันไว้ที่เดียว"""
 from __future__ import annotations
 
 import datetime as dt
@@ -21,13 +21,10 @@ class StaffPanel(discord.ui.View):
         return interaction.client.get_cog("AttendanceCog")
 
     # แถว 1: ลงเวลา (ตรวจสิทธิ์พนักงานในแต่ละฟังก์ชันอยู่แล้ว)
-    @discord.ui.button(label="เข้างาน", emoji="🟢", style=discord.ButtonStyle.success, custom_id="olp:staff:in", row=0)
+    @discord.ui.button(label="เข้างานทำงานวันนี้", emoji="🟢", style=discord.ButtonStyle.success, custom_id="olp:staff:in", row=0)
     async def clock_in(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._attendance(interaction).clock_in(interaction)
 
-    @discord.ui.button(label="ออกงาน", emoji="🔴", style=discord.ButtonStyle.danger, custom_id="olp:staff:out", row=0)
-    async def clock_out(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._attendance(interaction).clock_out(interaction)
 
     # แถว 2: ข้อมูลของฉัน
     @discord.ui.button(label="ชั่วโมงของฉัน", emoji="🕒", style=discord.ButtonStyle.primary, custom_id="olp:staff:hours", row=1)
@@ -119,7 +116,7 @@ class StaffPanelCog(commands.Cog):
             embed.description = "\n".join(lines)[:4000]
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="panel_staff", description="โพสต์เมนูพนักงาน (เข้า/ออกงาน, ชั่วโมง, รายได้, งานของฉัน)")
+    @app_commands.command(name="panel_staff", description="โพสต์เมนูพนักงาน (เข้างาน, ชั่วโมง, รายได้, งานของฉัน)")
     async def panel_staff(self, interaction: discord.Interaction) -> None:
         if not is_admin(interaction.user, self.cfg.admin_role_id):
             await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
@@ -132,10 +129,10 @@ class StaffPanelCog(commands.Cog):
             title="🧑‍💼 OLP-Noir · เมนูพนักงาน",
             description=(
                 "กดปุ่มได้เลย ผลลัพธ์จะเห็นเฉพาะคุณ\n\n"
-                "**ลงเวลา** — 🟢 เข้างาน · 🔴 ออกงาน\n"
+                "**ลงเวลา** — 🟢 เข้างานทำงานวันนี้ (ไม่ต้องกดออกงาน)\n"
                 "**ของฉัน** — 🕒 ชั่วโมงของฉัน · 💰 รายได้รอบนี้ · 📋 งานของฉัน\n"
                 "**ทีม** — 👥 ใครอยู่ในกะ\n\n"
-                f"*ลืมกดออกงานเกิน {self.cfg.attendance_warn_hours:g} ชม. บอทจะเตือนทาง DM ค่ะ*"
+                f"*บอทตัดออกงานทุกคนอัตโนมัติตอน {self.bot.get_cog('AttendanceCog')._cutoff_today():%H:%M} น. ค่ะ*"
             ),
             color=COLOR_MAIN,
         )

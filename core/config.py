@@ -75,6 +75,14 @@ class Config:
 
     # ------------------------------------------------------------ attendance
     @property
+    def attendance_cutoff_hour(self) -> int:
+        return int(self.get("attendance.cutoff_hour", 1))
+
+    @property
+    def attendance_cutoff_minute(self) -> int:
+        return int(self.get("attendance.cutoff_minute", 0))
+
+    @property
     def attendance_warn_hours(self) -> float:
         return float(self.get("attendance.warn_hours", 12))
 
