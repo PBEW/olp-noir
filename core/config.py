@@ -29,8 +29,11 @@ class Config:
             self.data: dict[str, Any] = json.load(fp)
 
     def save(self) -> None:
-        with self.path.open("w", encoding="utf-8") as fp:
+        # เขียนไฟล์ชั่วคราวก่อนแล้วค่อยแทนที่ — กันไฟล์เสียถ้าบอทดับกลางการบันทึก
+        tmp = self.path.with_suffix(".json.tmp")
+        with tmp.open("w", encoding="utf-8") as fp:
             json.dump(self.data, fp, ensure_ascii=False, indent=2)
+        tmp.replace(self.path)
 
     def get(self, dotted: str, default: Any = None) -> Any:
         node: Any = self.data

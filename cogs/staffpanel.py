@@ -26,6 +26,10 @@ class StaffPanel(discord.ui.View):
         await self._attendance(interaction).clock_in(interaction)
 
 
+    @discord.ui.button(label="ยกเลิกเข้างาน", emoji="↩️", style=discord.ButtonStyle.secondary, custom_id="olp:staff:cancel", row=0)
+    async def cancel_in(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._attendance(interaction).cancel_clock_in(interaction)
+
     # แถว 2: ข้อมูลของฉัน
     @discord.ui.button(label="ชั่วโมงของฉัน", emoji="🕒", style=discord.ButtonStyle.primary, custom_id="olp:staff:hours", row=1)
     async def my_hours(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -42,7 +46,7 @@ class StaffPanel(discord.ui.View):
         await cog.send_my_jobs(interaction)
 
     # แถว 3: ทีม
-    @discord.ui.button(label="ใครอยู่ในกะ", emoji="👥", style=discord.ButtonStyle.secondary, custom_id="olp:staff:on_duty", row=2)
+    @discord.ui.button(label="คนมาทำงานวันนี้", emoji="👥", style=discord.ButtonStyle.secondary, custom_id="olp:staff:on_duty", row=2)
     async def on_duty(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         cog = self._attendance(interaction)
         if await cog._deny_if_not_staff(interaction):
@@ -129,9 +133,9 @@ class StaffPanelCog(commands.Cog):
             title="🧑‍💼 OLP-Noir · เมนูพนักงาน",
             description=(
                 "กดปุ่มได้เลย ผลลัพธ์จะเห็นเฉพาะคุณ\n\n"
-                "**ลงเวลา** — 🟢 เข้างานทำงานวันนี้ (ไม่ต้องกดออกงาน)\n"
+                "**ลงเวลา** — 🟢 เข้างานทำงานวันนี้ · ↩️ ยกเลิกเข้างาน (ไม่ต้องกดออกงาน)\n"
                 "**ของฉัน** — 🕒 ชั่วโมงของฉัน · 💰 รายได้รอบนี้ · 📋 งานของฉัน\n"
-                "**ทีม** — 👥 ใครอยู่ในกะ\n\n"
+                "**ทีม** — 👥 คนมาทำงานวันนี้\n\n"
                 f"*บอทตัดออกงานทุกคนอัตโนมัติตอน {self.bot.get_cog('AttendanceCog')._cutoff_today():%H:%M} น. ค่ะ*"
             ),
             color=COLOR_MAIN,

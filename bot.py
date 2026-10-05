@@ -34,6 +34,7 @@ EXTENSIONS = [
     "cogs.dmrouter",
     "cogs.admin",
     "cogs.adminpanel",
+    "cogs.shopsettings",
     "cogs.staffpanel",
     "cogs.dailycheck",
     "cogs.donate",

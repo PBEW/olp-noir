@@ -92,14 +92,14 @@ class AttendanceFixModal(discord.ui.Modal):
     )
 
     def __init__(self, member: discord.Member, new_shift: bool) -> None:
-        title = "เพิ่มกะที่ลืมกด" if new_shift else "แก้เวลากะล่าสุด"
+        title = "เพิ่มวันที่ลืมกดเข้างาน" if new_shift else "แก้เวลาเข้างานล่าสุด"
         super().__init__(title=f"{title} · {member.display_name}"[:45])
         self.member = member
         self.new_shift = new_shift
+        self.clock_out.label = "เวลาออกงาน (ไม่ต้องใส่ = ใช้เวลาตัดอัตโนมัติ)"
         if new_shift:
             self.clock_in.label = "เวลาเข้างาน"
-            self.clock_out.label = "เวลาออกงาน"
-            self.clock_in.required = self.clock_out.required = True
+            self.clock_in.required = True
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not _is_admin(interaction):
@@ -130,11 +130,11 @@ class AttendanceFixView(AdminOnlyView):
             return
         await interaction.response.send_modal(AttendanceFixModal(self.member, new_shift))
 
-    @discord.ui.button(label="แก้กะล่าสุด", emoji="✏️", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="แก้เวลาเข้างานล่าสุด", emoji="✏️", style=discord.ButtonStyle.primary, row=1)
     async def edit_latest(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._open(interaction, False)
 
-    @discord.ui.button(label="เพิ่มกะที่ลืมกด", emoji="➕", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="เพิ่มวันที่ลืมกดเข้างาน", emoji="➕", style=discord.ButtonStyle.secondary, row=1)
     async def add_shift(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._open(interaction, True)
 
@@ -169,7 +169,7 @@ HELP_TEXT = (
     "`/bill info` ดูบิล · `/bill paid` ยืนยันชำระด้วยมือ · `/bill cancel` ยกเลิกบิล\n\n"
     "**อื่น ๆ**\n"
     "`/vip_grant` ให้ VIP · `/attendance_fix` แก้เวลาเข้างาน · `/cutoff` ตัดรอบ · `/summary` สรุปยอด\n"
-    "`/attendance_report` ชั่วโมงงาน · `/daily_checkin` โพสต์กระดานเช็คชื่อ · `/donate_top` อันดับผู้โดเนท · `/on_duty` ใครอยู่ในกะ · `/health` สถานะระบบ · `/reload_config` โหลด config"
+    "`/attendance_report` ชั่วโมงงาน · `/daily_checkin` โพสต์กระดานเช็คชื่อ · `/donate_top` อันดับผู้โดเนท · `/on_duty` คนมาทำงานวันนี้ · `/health` สถานะระบบ · `/reload_config` โหลด config"
 )
 
 
@@ -196,7 +196,7 @@ class AdminPanel(discord.ui.View):
         embed = await interaction.client.get_cog("AttendanceCog").current_hours_embed()
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @discord.ui.button(label="ใครอยู่ในกะ", emoji="🟢", style=discord.ButtonStyle.primary, custom_id="olp:admin:on_duty", row=0)
+    @discord.ui.button(label="คนมาทำงานวันนี้", emoji="👥", style=discord.ButtonStyle.primary, custom_id="olp:admin:on_duty", row=0)
     async def on_duty(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         embed = await interaction.client.get_cog("AttendanceCog").on_duty_embed()
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -221,8 +221,8 @@ class AdminPanel(discord.ui.View):
                 title="✏️ แก้เวลาเข้างาน",
                 description=(
                     "เลือกพนักงาน แล้วเลือก\n"
-                    "✏️ **แก้กะล่าสุด** — ลืมกดออกงาน หรือเวลาไม่ถูก\n"
-                    "➕ **เพิ่มกะที่ลืมกด** — ลืมกดทั้งเข้าและออกงาน"
+                    "✏️ **แก้เวลาเข้างานล่าสุด** — กดเข้างานแล้วแต่เวลาไม่ถูก\n"
+                    "➕ **เพิ่มวันที่ลืมกดเข้างาน** — มาทำงานแต่ลืมกด (เวลาออกใช้เวลาตัดอัตโนมัติ)"
                 ),
                 color=COLOR_INFO,
             ),
@@ -259,6 +259,10 @@ class AdminPanel(discord.ui.View):
             embed=discord.Embed(description="โหลด config ใหม่เรียบร้อยค่ะ", color=COLOR_OK), ephemeral=True
         )
 
+    @discord.ui.button(label="ตั้งค่าร้าน", emoji="⚙️", style=discord.ButtonStyle.primary, custom_id="olp:admin:settings", row=3)
+    async def settings(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.client.get_cog("ShopSettingsCog").open_settings(interaction)
+
     @discord.ui.button(label="คำสั่งทั้งหมด", emoji="📖", style=discord.ButtonStyle.secondary, custom_id="olp:admin:help", row=2)
     async def help(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_message(
@@ -284,9 +288,10 @@ class AdminPanelCog(commands.Cog):
             title="🛠️ OLP-Noir · เมนูแอดมิน",
             description=(
                 "กดปุ่มได้เลย ผลลัพธ์จะเห็นเฉพาะคนกด\n\n"
-                "**ดูข้อมูล** — 📊 สรุปยอดรอบนี้ · 🕒 ชั่วโมงงาน · 🟢 ใครอยู่ในกะ\n"
+                "**ดูข้อมูล** — 📊 สรุปยอดรอบนี้ · 🕒 ชั่วโมงงาน · 👥 คนมาทำงานวันนี้\n"
                 "**จัดการ** — 💎 ให้สิทธิ์ VIP · ✏️ แก้เวลาเข้างาน · ✂️ ตัดรอบทันที\n"
-                "**ระบบ** — 🩺 สถานะระบบ · 🔄 โหลด config ใหม่ · 📖 คำสั่งทั้งหมด\n\n"
+                "**ระบบ** — 🩺 สถานะระบบ · 🔄 โหลด config ใหม่ · 📖 คำสั่งทั้งหมด\n"
+                "**ตั้งค่า** — ⚙️ ตั้งค่าร้าน (ห้อง, บริการ/ราคา, VIP, ส่วนแบ่ง, โค้ดส่วนลด, การชำระเงิน)\n\n"
                 "*ควรโพสต์ในห้องที่เห็นเฉพาะแอดมิน (คนอื่นกดก็ใช้ไม่ได้)*"
             ),
             color=COLOR_MAIN,
