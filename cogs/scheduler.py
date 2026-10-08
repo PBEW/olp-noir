@@ -47,6 +47,7 @@ class SchedulerCog(commands.Cog):
         try:
             await self.check_jobs()
             await self.check_tickets()
+            await self.check_stale_slips()
             await self.check_vip_expiry()
             await self.check_cutoff()
         except Exception:  # noqa: BLE001 - ลูปต้องไม่ตาย
@@ -150,6 +151,45 @@ class SchedulerCog(commands.Cog):
             await tickets.close_ticket(ticket["id"], reason=reason)
 
     # ---------------------------------------------------------------- VIP
+    async def check_stale_slips(self) -> None:
+        """สลิปรอตรวจนานเกิน bill_timeout.slip_review_minutes → แจ้งห้องตรวจสลิป 1 ครั้งต่อรายการ"""
+        wait = dt.timedelta(minutes=self.cfg.slip_review_minutes)
+        now = now_utc()
+        pending = [
+            ("JOB", "บิล", j["id"], j["customer_id"], j["total_price"])
+            for j in await self.db.jobs_by_status(["SLIP_PENDING"])
+        ]
+        pending += [
+            ("VIP", "VIP", r["id"], r["customer_id"], r["total_price"])
+            for r in await self.db.fetchall("SELECT * FROM vip_orders WHERE status = 'SLIP_PENDING'")
+        ]
+        pending += [
+            ("DON", "โดเนท", r["id"], r["donor_id"], r["amount"])
+            for r in await self.db.fetchall("SELECT * FROM donations WHERE status = 'SLIP_PENDING'")
+        ]
+        payments = self.bot.get_cog("PaymentsCog")
+        for kind, label, ref, customer, amount in pending:
+            seen_key = f"stale:slipseen:{kind}:{ref}"
+            first_seen = await self.db.get_meta(seen_key)
+            if first_seen is None:
+                await self.db.set_meta(seen_key, to_iso(now))
+                continue
+            if now - from_iso(first_seen) < wait or await self.db.get_meta(f"stale:slip:{kind}:{ref}"):
+                continue
+            await self.db.set_meta(f"stale:slip:{kind}:{ref}", to_iso(now))
+            await payments.notify_admin(
+                embed=discord.Embed(
+                    title="⏰ สลิปค้างตรวจนาน",
+                    description=(
+                        f"สลิป{label} `#{ref}` รอตรวจเกิน **{self.cfg.slip_review_minutes} นาที** แล้ว\n"
+                        f"ลูกค้า <@{customer}> · ยอด **{money(amount)}**\n"
+                        "กด ✅ / ❌ ที่ข้อความสลิปด้านบนได้เลยค่ะ"
+                    ),
+                    color=COLOR_WARN,
+                ),
+                topic="slip",
+            )
+
     async def check_vip_expiry(self) -> None:
         now_iso = to_iso(now_utc())
         expired = await self.db.fetchall(

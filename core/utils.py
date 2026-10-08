@@ -118,6 +118,19 @@ def is_admin(member: discord.abc.User | discord.Member, admin_role_id: int) -> b
     return any(r.id == admin_role_id for r in member.roles)
 
 
+def is_reception(member: discord.abc.User | discord.Member, cfg) -> bool:
+    """แอดมิน หรือมี Role รีเซปชั่น (roles.reception)"""
+    if is_admin(member, cfg.admin_role_id):
+        return True
+    if not isinstance(member, discord.Member):
+        return False
+    allowed = set(cfg.reception_role_ids)
+    return any(r.id in allowed for r in member.roles)
+
+
+NOT_RECEPTION = "เฉพาะแอดมินหรือรีเซปชั่นเท่านั้นค่ะ"
+
+
 # ---------------------------------------------------------------------- DM
 async def send_dm(
     bot: discord.Client,
