@@ -5,7 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from core.embeds import COLOR_MAIN
+from core.embeds import COLOR_MAIN, panel_embed
 from core.utils import is_admin, purge_old_panels
 
 
@@ -82,17 +82,24 @@ class RequestPanelCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         removed = await purge_old_panels(interaction.channel, self.bot.user.id, "olp:request:")
 
-        embed = discord.Embed(
-            title="✨ OLP-Noir · บริการลูกค้า",
-            description=(
-                "เลือกรายการที่ต้องการได้เลยค่ะ ระบบจะติดต่อกลับทาง **DM** ของบอท\n\n"
-                "💬 **สอบถามเจ้าหน้าที่** — คุยกับแอดมินแบบตัวต่อตัวผ่าน DM\n"
-                "💎 **ซื้อ VIP / ต่ออายุ** — เลือกแพ็กเกจ ใส่โค้ดส่วนลด และชำระเงินได้เอง\n"
-                "🔍 **ตรวจสอบสิทธิ์ VIP** — ดูแพ็กเกจและวันหมดอายุของคุณ\n"
-                "🎁 **โดเนท** — สนับสนุนร้านหรือโฮสต์คนโปรด · 🏆 ดูอันดับผู้โดเนทเดือนนี้\n\n"
-                "*กรุณาเปิดรับข้อความ DM จากสมาชิกในเซิร์ฟเวอร์ก่อนใช้งานนะคะ*"
-            ),
-            color=COLOR_MAIN,
+        embed = panel_embed(
+            "✨ OLP-Noir · บริการลูกค้า",
+            "เลือกรายการที่ต้องการได้เลยค่ะ บอทจะติดต่อกลับทาง **DM** 💌",
+            [
+                ("💬 ติดต่อร้าน", [
+                    ("💬 สอบถามเจ้าหน้าที่", "คุยกับทีมงานแบบตัวต่อตัวผ่าน DM ของบอท"),
+                ]),
+                ("💎 สมาชิก VIP", [
+                    ("💎 ซื้อ VIP / ต่ออายุ", "เลือกแพ็กเกจ ใส่โค้ดส่วนลด แล้วชำระผ่าน QR ได้เอง"),
+                    ("🔍 ตรวจสอบสิทธิ์ VIP", "ดูระดับ วันหมดอายุ และสิทธิ์ฟรีที่เหลือ"),
+                ]),
+                ("🎁 สนับสนุน", [
+                    ("🎁 โดเนท", "สนับสนุนร้านหรือโฮสต์คนโปรด พร้อมฝากข้อความ"),
+                    ("🏆 อันดับผู้โดเนท", "Top ผู้สนับสนุนประจำเดือน"),
+                ]),
+            ],
+            footer="กรุณาเปิดรับข้อความ DM จากสมาชิกในเซิร์ฟเวอร์ก่อนใช้งานนะคะ",
+            guild=interaction.guild,
         )
         await interaction.channel.send(embed=embed, view=RequestPanel())
 

@@ -23,6 +23,39 @@ STATUS_LABEL = {
 }
 
 
+def menu_item(title: str, desc: str) -> str:
+    return f"{title}\n-# {desc}" if desc else title
+
+
+def rows_text(rows) -> str:
+    """แถว ไอคอน + หัวข้อตัวหนา + ค่า"""
+    return "\n".join(f"{icon} **{label}**　{value}" for icon, label, value in rows)
+
+
+def panel_embed(
+    title: str,
+    intro: str,
+    sections: list[tuple[str, list[tuple[str, str]] | str]],
+    *,
+    footer: str | None = None,
+    guild: discord.Guild | None = None,
+    color: int = COLOR_MAIN,
+) -> discord.Embed:
+    """หน้าตาแผงปุ่มมาตรฐาน — แบ่งหมวดตามแถวปุ่ม หมวดละ 1 field
+
+    sections = [(ชื่อหมวด, [(ชื่อปุ่ม, คำอธิบาย), ...] หรือข้อความ), ...]
+    """
+    embed = discord.Embed(title=title, description=intro, color=color)
+    if guild is not None and guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    for name, body in sections:
+        value = body if isinstance(body, str) else "\n".join(menu_item(f"**{t}**", d) for t, d in body)
+        embed.add_field(name=name[:256], value=value[:1024] or "-", inline=False)
+    if footer:
+        embed.set_footer(text=footer)
+    return embed
+
+
 def job_embed(cfg: Config, job: dict, *, title: str, color: int = COLOR_MAIN) -> discord.Embed:
     start = from_iso(job["start_time"])
     end = from_iso(job["end_time"])

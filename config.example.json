@@ -2,8 +2,12 @@
   "guild_id": 0,
   "timezone": "Asia/Bangkok",
 
+  "_comment_channels": "admin = ห้องหลัก | ticket = ลูกค้าทัก DM / รับเรื่อง | slip = สลิปรอยืนยัน, สลิปค้าง, ส่ง DM ยอดไม่สำเร็จ | attendance = พนักงานเข้างาน | log = ประวัติแก้ตั้งค่า — ห้องที่ไม่ตั้ง (0) จะส่งเข้าห้อง admin แทน · ตั้งผ่าน /panel_admin → ⚙️ ตั้งค่าร้าน → 🧭 ระบบบอท ได้",
   "channels": {
     "admin": 0,
+    "ticket": 0,
+    "slip": 0,
+    "attendance": 0,
     "review": 0,
     "donate": 0,
     "log": 0
@@ -11,6 +15,7 @@
 
   "roles": {
     "admin": 0,
+    "reception": 0,
     "staff": 0,
     "on_duty": 0
   },
@@ -207,6 +212,10 @@
     "enabled": false,
     "spreadsheet_id": "",
     "credentials_file": "credentials.json"
+  },
+
+  "bill_timeout": {
+    "slip_review_minutes": 10
   },
 
   "notify": {

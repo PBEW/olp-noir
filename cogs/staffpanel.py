@@ -8,7 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.cycle import cycle_start_local
-from core.embeds import COLOR_MAIN, COLOR_OK, STATUS_LABEL
+from core.embeds import COLOR_MAIN, COLOR_OK, STATUS_LABEL, panel_embed
 from core.utils import discord_ts, fmt_datetime, from_iso, is_admin, money, now_utc, purge_old_panels, to_iso
 
 
@@ -129,16 +129,25 @@ class StaffPanelCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         removed = await purge_old_panels(interaction.channel, self.bot.user.id, "olp:staff:")
 
-        embed = discord.Embed(
-            title="🧑‍💼 OLP-Noir · เมนูพนักงาน",
-            description=(
-                "กดปุ่มได้เลย ผลลัพธ์จะเห็นเฉพาะคุณ\n\n"
-                "**ลงเวลา** — 🟢 เข้างานทำงานวันนี้ · ↩️ ยกเลิกเข้างาน (ไม่ต้องกดออกงาน)\n"
-                "**ของฉัน** — 🕒 ชั่วโมงของฉัน · 💰 รายได้รอบนี้ · 📋 งานของฉัน\n"
-                "**ทีม** — 👥 คนมาทำงานวันนี้\n\n"
-                f"*บอทตัดออกงานทุกคนอัตโนมัติตอน {self.bot.get_cog('AttendanceCog')._cutoff_today():%H:%M} น. ค่ะ*"
-            ),
-            color=COLOR_MAIN,
+        cutoff = self.bot.get_cog("AttendanceCog")._cutoff_today()
+        embed = panel_embed(
+            "🧑‍💼 OLP-Noir · เมนูพนักงาน",
+            "กดปุ่มได้เลย ผลลัพธ์เห็นเฉพาะคุณ 🤍",
+            [
+                ("🕒 ลงเวลา", [
+                    ("🟢 เข้างานทำงานวันนี้", f"กดครั้งเดียวพอ ไม่ต้องกดออกงาน — บอทตัดให้ตอน {cutoff:%H:%M} น."),
+                    ("↩️ ยกเลิกเข้างาน", "กดผิด หรือสุดท้ายไม่ได้มาทำงาน"),
+                ]),
+                ("👤 ของฉัน", [
+                    ("🕒 ชั่วโมงของฉัน", "ชั่วโมงสะสมของรอบนี้"),
+                    ("💰 รายได้รอบนี้", "ส่วนแบ่งจากบิล + โดเนทที่ได้รับ"),
+                    ("📋 งานของฉัน", "บิลที่ยังไม่จบเวลา"),
+                ]),
+                ("👥 ทีม", [
+                    ("👥 คนมาทำงานวันนี้", "ใครกดเข้างานแล้วบ้าง"),
+                ]),
+            ],
+            guild=interaction.guild,
         )
         await interaction.channel.send(embed=embed, view=StaffPanel())
 

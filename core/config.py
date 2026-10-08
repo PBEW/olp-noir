@@ -73,6 +73,17 @@ class Config:
         return ids[0] if ids else 0
 
     @property
+    def reception_role_ids(self) -> list[int]:
+        """roles.reception = Role รีเซปชั่น ใช้แผงรีเซปชั่น / ตรวจสลิป / รับเรื่องลูกค้า ได้โดยไม่ต้องเป็นแอดมิน"""
+        raw = self.get("roles.reception", 0) or 0
+        values = raw if isinstance(raw, list) else [raw]
+        return [int(v) for v in values if str(v).strip().isdigit() and int(v)]
+
+    @property
+    def slip_review_minutes(self) -> int:
+        return int(self.get("bill_timeout.slip_review_minutes", 10))
+
+    @property
     def on_duty_role_id(self) -> int:
         return int(self.get("roles.on_duty", 0) or 0)
 

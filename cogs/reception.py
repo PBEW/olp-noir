@@ -9,13 +9,14 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from core.embeds import COLOR_DANGER, COLOR_INFO, COLOR_MAIN, COLOR_OK, COLOR_WARN, job_embed
+from core.embeds import COLOR_DANGER, COLOR_INFO, COLOR_MAIN, COLOR_OK, COLOR_WARN, job_embed, panel_embed
 from core.pricing import quote_services, reserve_quota_for_job, split_revenue
 from core.utils import (
     TimeParseError,
     discord_ts,
     from_iso,
-    is_admin,
+    NOT_RECEPTION,
+    is_reception,
     money,
     now_utc,
     parse_start_time,
@@ -515,6 +516,118 @@ class ReceptionPanel(discord.ui.View):
         cog: ReceptionCog = interaction.client.get_cog("ReceptionCog")  # type: ignore[assignment]
         await cog.show_active_jobs(interaction)
 
+    @discord.ui.button(
+        label="ยืนยันชำระเงิน",
+        emoji="✅",
+        style=discord.ButtonStyle.success,
+        custom_id="olp:panel:bill_paid",
+        row=1,
+    )
+    async def bill_paid(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not is_reception(interaction.user, interaction.client.cfg):
+            await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
+            return
+        await interaction.response.send_modal(BillActionModal("paid"))
+
+    @discord.ui.button(
+        label="ยกเลิกบิล",
+        emoji="❌",
+        style=discord.ButtonStyle.danger,
+        custom_id="olp:panel:bill_cancel",
+        row=1,
+    )
+    async def bill_cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not is_reception(interaction.user, interaction.client.cfg):
+            await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
+            return
+        await interaction.response.send_modal(BillActionModal("cancel"))
+
+    @discord.ui.button(
+        label="ดูบิล",
+        emoji="🔍",
+        style=discord.ButtonStyle.secondary,
+        custom_id="olp:panel:bill_info",
+        row=1,
+    )
+    async def bill_info(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not is_reception(interaction.user, interaction.client.cfg):
+            await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
+            return
+        await interaction.response.send_modal(BillActionModal("info"))
+
+
+class BillActionModal(discord.ui.Modal):
+    """ยืนยันชำระด้วยมือ / ยกเลิกบิล / ดูบิล จากแผงรีเซปชั่น (เหมือน /bill paid · /bill cancel · /bill info)"""
+
+    TITLES = {"paid": "✅ ยืนยันชำระเงินด้วยมือ", "cancel": "❌ ยกเลิกบิล", "info": "🔍 ดูรายละเอียดบิล"}
+
+    def __init__(self, action: str) -> None:
+        super().__init__(title=self.TITLES[action])
+        self.action = action
+        self.job_id = discord.ui.TextInput(label="เลขที่บิล", placeholder="เช่น 12", max_length=10)
+        self.add_item(self.job_id)
+        self.reason: discord.ui.TextInput | None = None
+        if action == "cancel":
+            self.reason = discord.ui.TextInput(
+                label="เหตุผล (ไม่บังคับ — ส่งให้ลูกค้า/พนักงาน)", required=False, max_length=200
+            )
+            self.add_item(self.reason)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        raw = self.job_id.value.strip().lstrip("#")
+        if not raw.isdigit():
+            await interaction.response.send_message("⚠️ เลขที่บิลต้องเป็นตัวเลขค่ะ", ephemeral=True)
+            return
+        if not is_reception(interaction.user, interaction.client.cfg):
+            await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
+            return
+        cfg = interaction.client.cfg
+        if self.action == "info":
+            job = await interaction.client.db.get_job(int(raw))
+            if job is None:
+                await interaction.response.send_message("ไม่พบบิลนี้ค่ะ", ephemeral=True)
+                return
+            await interaction.response.send_message(embed=job_embed(cfg, job, title=f"🧾 บิล #{raw}"), ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)  # ส่ง DM / ลงชีต อาจเกิน 3 วินาที
+        payments = interaction.client.get_cog("PaymentsCog")
+        if self.action == "paid":
+            ok, msg = await payments.mark_job_paid(int(raw), interaction.user)
+        else:
+            reason = str(self.reason.value).strip() if self.reason else ""
+            ok, msg = await payments.cancel_job(int(raw), interaction.user, reason or None)
+        await interaction.followup.send(
+            embed=discord.Embed(description=msg, color=COLOR_OK if ok else COLOR_DANGER), ephemeral=True
+        )
+        if ok:
+            await payments.notify_admin_text(f"🧾 {interaction.user.mention} (แผงรีเซปชั่น): {msg}", topic="slip")
+
+
+def reception_panel_embed(guild: discord.Guild | None) -> discord.Embed:
+    return panel_embed(
+        "🎛️ OLP-Noir · Reception",
+        "แผงงานรีเซปชั่น — ใช้ได้ทั้ง **แอดมิน** และ **Role รีเซปชั่น** · ผลลัพธ์เห็นเฉพาะคนกด",
+        [
+            ("🧾 งานบิล", [
+                ("🧾 เปิดบิลใหม่", "เลือกลูกค้า · พนักงาน · บริการ · ห้อง แล้วคำนวณราคาให้อัตโนมัติ"),
+                ("⏱️ ต่อเวลา", "เปิดบิลต่อเวลาและขยายเวลาจบของบิลเดิม"),
+                ("📋 งานที่กำลังดำเนินอยู่", "ดูบิลที่ยังไม่จบเวลา"),
+            ]),
+            ("💳 การเงิน", [
+                ("✅ ยืนยันชำระเงิน", "ลูกค้าจ่ายแล้วแต่ไม่ได้ส่งสลิปในบอท (เหมือน /bill paid)"),
+                ("❌ ยกเลิกบิล", "ยกเลิกพร้อมเหตุผล ไม่ลงบัญชี (เหมือน /bill cancel)"),
+                ("🔍 ดูบิล", "ดูรายละเอียดบิลจากเลขที่"),
+            ]),
+            ("📨 งานที่เข้าห้องอัตโนมัติ", (
+                "💬 ลูกค้าทัก DM ใหม่ → กด **รับเรื่อง**\n"
+                "🔎 สลิปรอยืนยัน → กด **✅ / ❌**\n"
+                "⏰ สลิปค้างตรวจนาน · ⚠️ ส่ง DM ยอดชำระไม่สำเร็จ"
+            )),
+        ],
+        footer="ตั้งห้องแยก 💬 ตั๋ว / 🧾 สลิป ได้ที่ ⚙️ ตั้งค่าร้าน → 🧭 ระบบบอท",
+        guild=guild,
+    )
+
 
 # --------------------------------------------------------------------- cog
 class ReceptionCog(commands.Cog):
@@ -526,7 +639,7 @@ class ReceptionCog(commands.Cog):
     # ------------------------------------------------------------- panels
     async def open_bill_panel(self, interaction: discord.Interaction) -> None:
         if not self._admin_guard(interaction):
-            await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
+            await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
             return
         wizard = OpenBillWizard(self, interaction.user)
         await interaction.response.send_message(
@@ -535,7 +648,7 @@ class ReceptionCog(commands.Cog):
 
     async def open_extend_panel(self, interaction: discord.Interaction) -> None:
         if not self._admin_guard(interaction):
-            await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
+            await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
             return
         now = now_utc()
         jobs = [
@@ -555,7 +668,7 @@ class ReceptionCog(commands.Cog):
 
     async def show_active_jobs(self, interaction: discord.Interaction) -> None:
         if not self._admin_guard(interaction):
-            await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
+            await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
             return
         now = now_utc()
         jobs = [
@@ -581,7 +694,8 @@ class ReceptionCog(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     def _admin_guard(self, interaction: discord.Interaction) -> bool:
-        return is_admin(interaction.user, self.cfg.admin_role_id)
+        """แอดมิน หรือ Role รีเซปชั่น"""
+        return is_reception(interaction.user, self.cfg)
 
     # ---------------------------------------------------------- สร้างบิล
     async def create_job(
@@ -776,28 +890,23 @@ class ReceptionCog(commands.Cog):
     # ------------------------------------------------------ คำสั่ง slash
     panel_group = app_commands.Group(name="panel", description="โพสต์แผงควบคุมของบอท")
 
-    @panel_group.command(name="reception", description="โพสต์แผงควบคุมรีเซปชั่น (สำหรับแอดมิน)")
-    async def panel_reception(self, interaction: discord.Interaction) -> None:
+    async def post_reception_panel(self, interaction: discord.Interaction) -> None:
         if not self._admin_guard(interaction):
-            await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
+            await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
         removed = await purge_old_panels(interaction.channel, self.bot.user.id, "olp:panel:")
-
-        embed = discord.Embed(
-            title="🎛️ Reception Control Panel",
-            description=(
-                "แผงควบคุมสำหรับแอดมิน / พนักงานต้อนรับ\n\n"
-                "🧾 **เปิดบิลใหม่** — เลือกลูกค้า พนักงาน บริการ ห้อง แล้วคำนวณราคาอัตโนมัติ\n"
-                "⏱️ **ต่อเวลา** — เปิดบิลต่อเวลาและขยายเวลาจบงานของบิลเดิม\n"
-                "📋 **งานที่กำลังดำเนินอยู่** — ดูงานที่ยังไม่จบเวลา"
-            ),
-            color=COLOR_MAIN,
-        )
-        await interaction.channel.send(embed=embed, view=ReceptionPanel())
-
+        await interaction.channel.send(embed=reception_panel_embed(interaction.guild), view=ReceptionPanel())
         note = f" (ลบแผงเก่าออก {removed} อัน)" if removed else ""
-        await interaction.followup.send(f"โพสต์แผงควบคุมแล้วค่ะ{note}", ephemeral=True)
+        await interaction.followup.send(f"โพสต์แผงรีเซปชั่นแล้วค่ะ{note}", ephemeral=True)
+
+    @panel_group.command(name="reception", description="โพสต์แผงรีเซปชั่น (แอดมิน / Role รีเซปชั่น)")
+    async def panel_reception(self, interaction: discord.Interaction) -> None:
+        await self.post_reception_panel(interaction)
+
+    @app_commands.command(name="panel_reception", description="โพสต์แผงรีเซปชั่น (แอดมิน / Role รีเซปชั่น)")
+    async def panel_reception_flat(self, interaction: discord.Interaction) -> None:
+        await self.post_reception_panel(interaction)
 
     bill_group = app_commands.Group(name="bill", description="จัดการบิล")
 
@@ -805,7 +914,7 @@ class ReceptionCog(commands.Cog):
     @app_commands.describe(job_id="เลขที่บิล")
     async def bill_info(self, interaction: discord.Interaction, job_id: int) -> None:
         if not self._admin_guard(interaction):
-            await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
+            await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
             return
         job = await self.db.get_job(job_id)
         if job is None:
@@ -821,7 +930,7 @@ class ReceptionCog(commands.Cog):
         self, interaction: discord.Interaction, job_id: int, reason: str | None = None
     ) -> None:
         if not self._admin_guard(interaction):
-            await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
+            await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
             return
         payments = self.bot.get_cog("PaymentsCog")
         ok, msg = await payments.cancel_job(job_id, interaction.user, reason)
@@ -834,7 +943,7 @@ class ReceptionCog(commands.Cog):
     @app_commands.describe(job_id="เลขที่บิล")
     async def bill_paid(self, interaction: discord.Interaction, job_id: int) -> None:
         if not self._admin_guard(interaction):
-            await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
+            await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
             return
         payments = self.bot.get_cog("PaymentsCog")
         ok, msg = await payments.mark_job_paid(job_id, interaction.user)

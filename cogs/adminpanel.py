@@ -5,7 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from core.embeds import COLOR_DANGER, COLOR_INFO, COLOR_MAIN, COLOR_OK, COLOR_WARN
+from core.embeds import COLOR_DANGER, COLOR_INFO, COLOR_MAIN, COLOR_OK, COLOR_WARN, panel_embed
 from core.utils import is_admin, purge_old_panels
 
 NOT_ADMIN = "เฉพาะแอดมินเท่านั้นค่ะ"
@@ -163,7 +163,7 @@ class CutoffConfirmView(AdminOnlyView):
 # ---------------------------------------------------------- แผงหลัก
 HELP_TEXT = (
     "**แผงที่โพสต์ได้**\n"
-    "`/panel reception` แผงรีเซปชั่น (เปิดบิล / ต่อเวลา / งานที่ดำเนินอยู่)\n"
+    "`/panel_reception` แผงรีเซปชั่น (เปิดบิล · ต่อเวลา · ยืนยันชำระ · ยกเลิกบิล — แอดมิน/Role รีเซปชั่น)\n"
     "`/panel_request` แผงบริการลูกค้า · `/panel_staff` เมนูพนักงาน · `/panel_attendance` แผงลงเวลา · `/panel_admin` แผงนี้\n\n"
     "**บิล**\n"
     "`/bill info` ดูบิล · `/bill paid` ยืนยันชำระด้วยมือ · `/bill cancel` ยกเลิกบิล\n\n"
@@ -284,17 +284,29 @@ class AdminPanelCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         removed = await purge_old_panels(interaction.channel, self.bot.user.id, "olp:admin:")
 
-        embed = discord.Embed(
-            title="🛠️ OLP-Noir · เมนูแอดมิน",
-            description=(
-                "กดปุ่มได้เลย ผลลัพธ์จะเห็นเฉพาะคนกด\n\n"
-                "**ดูข้อมูล** — 📊 สรุปยอดรอบนี้ · 🕒 ชั่วโมงงาน · 👥 คนมาทำงานวันนี้\n"
-                "**จัดการ** — 💎 ให้สิทธิ์ VIP · ✏️ แก้เวลาเข้างาน · ✂️ ตัดรอบทันที\n"
-                "**ระบบ** — 🩺 สถานะระบบ · 🔄 โหลด config ใหม่ · 📖 คำสั่งทั้งหมด\n"
-                "**ตั้งค่า** — ⚙️ ตั้งค่าร้าน (ห้อง, บริการ/ราคา, VIP, ส่วนแบ่ง, โค้ดส่วนลด, การชำระเงิน)\n\n"
-                "*ควรโพสต์ในห้องที่เห็นเฉพาะแอดมิน (คนอื่นกดก็ใช้ไม่ได้)*"
-            ),
-            color=COLOR_MAIN,
+        embed = panel_embed(
+            "🛠️ OLP-Noir · เมนูแอดมิน",
+            "กดปุ่มได้เลย ผลลัพธ์เห็นเฉพาะคนกด · **ใช้ได้เฉพาะแอดมิน** (งานบิล/สลิปของรีเซปชั่นอยู่ที่ `/panel_reception`)",
+            [
+                ("📊 ดูข้อมูล", [
+                    ("📊 สรุปยอดรอบนี้", "รายรับ · ส่วนแบ่งพนักงาน · รายได้ร้าน · โดเนท"),
+                    ("🕒 ชั่วโมงงาน", "ชั่วโมงสะสมของพนักงานรอบนี้"),
+                    ("👥 คนมาทำงานวันนี้", "ใครกดเข้างานตั้งแต่ตี 1 ล่าสุด"),
+                ]),
+                ("🧰 จัดการ", [
+                    ("💎 ให้สิทธิ์ VIP", "เลือกสมาชิก → ระดับ → จำนวนเดือน"),
+                    ("✏️ แก้เวลาเข้างาน", "แก้เวลาล่าสุด หรือเพิ่มวันที่ลืมกด"),
+                    ("✂️ ตัดรอบทันที", "สรุปยอดเข้าห้องแอดมินแล้วเริ่มรอบใหม่"),
+                ]),
+                ("🖥️ ระบบ", [
+                    ("🩺 สถานะระบบ · 🔄 โหลด config ใหม่ · 📖 คำสั่งทั้งหมด", ""),
+                ]),
+                ("⚙️ ตั้งค่า", [
+                    ("⚙️ ตั้งค่าร้าน", "ห้อง/Role ที่บอทใช้ · ห้องบริการ · ราคา · VIP · ส่วนแบ่ง · โค้ดส่วนลด · การชำระเงิน"),
+                ]),
+            ],
+            footer="ควรโพสต์ในห้องที่เห็นเฉพาะแอดมิน — คนอื่นกดก็ใช้ไม่ได้",
+            guild=interaction.guild,
         )
         await interaction.channel.send(embed=embed, view=AdminPanel())
 

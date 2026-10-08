@@ -308,7 +308,7 @@ class AttendanceCog(commands.Cog):
     async def _notify_admin(self, content: str | None = None, *, embed: discord.Embed | None = None) -> None:
         payments = self.bot.get_cog("PaymentsCog")
         if payments is not None:
-            await payments.notify_admin(content=content, embed=embed)
+            await payments.notify_admin(content=content, embed=embed, topic="attendance")
 
     async def _log_to_sheet(self, row: dict | None) -> None:
         if row is None or not row["clock_out"] or not self.bot.sheets.ready:
