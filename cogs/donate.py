@@ -154,7 +154,7 @@ class DonateCog(commands.Cog):
         pending = await self.db.get_pending_slip(donor.id)
         if pending is not None and pending["kind"] != "DON":
             await interaction.response.send_message(
-                "คุณมีรายการอื่นที่รอชำระเงินอยู่ (บิลหรือ VIP) กรุณาส่งสลิปรายการนั้นให้เสร็จก่อนนะคะ",
+                "ยังมีบิลหรือ VIP ที่รอจ่ายอยู่ ส่งสลิปอันนั้นก่อนแล้วค่อยมาโดเนทนะคะ",
                 ephemeral=True,
             )
             return
@@ -181,7 +181,7 @@ class DonateCog(commands.Cog):
         embed = payment_embed(
             self.cfg,
             title="🎁 ยอดโดเนท",
-            description=f"รายการ `D#{donation_id}` — โดเนทให้ {target}" + (f"\nข้อความ: {message}" if message else ""),
+            description=f"โดเนทให้ {target} (`D#{donation_id}`)" + (f"\nข้อความ: {message}" if message else ""),
             amount=amount,
         )
         await self.db.set_pending_slip(donor.id, "DON", donation_id, to_iso(now_utc()))
@@ -190,7 +190,7 @@ class DonateCog(commands.Cog):
             await self.db.update_donation(donation_id, status="CANCELLED")
             await self.db.clear_pending_slip(donor.id)
             await interaction.response.send_message(
-                "❌ ส่ง DM ไม่สำเร็จ กรุณาเปิดรับข้อความ DM จากสมาชิกในเซิร์ฟเวอร์ แล้วลองใหม่นะคะ",
+                "❌ บอทส่ง DM หาคุณไม่ได้ ลองเปิดรับ DM จากสมาชิกในเซิร์ฟเวอร์ แล้วกดใหม่อีกทีนะคะ",
                 ephemeral=True,
             )
             return

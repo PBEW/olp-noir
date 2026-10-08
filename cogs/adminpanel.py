@@ -169,7 +169,7 @@ HELP_TEXT = (
     "`/bill info` ดูบิล · `/bill paid` ยืนยันชำระด้วยมือ · `/bill cancel` ยกเลิกบิล\n\n"
     "**อื่น ๆ**\n"
     "`/vip_grant` ให้ VIP · `/attendance_fix` แก้เวลาเข้างาน · `/cutoff` ตัดรอบ · `/summary` สรุปยอด\n"
-    "`/attendance_report` ชั่วโมงงาน · `/daily_checkin` โพสต์กระดานเช็คชื่อ · `/donate_top` อันดับผู้โดเนท · `/on_duty` คนมาทำงานวันนี้ · `/sheets_format` จัดรูปแบบชีต · `/health` สถานะระบบ · `/reload_config` โหลด config"
+    "`/attendance_report` ชั่วโมงงาน · `/daily_checkin` เช็คชื่อประชุม/อีเวนต์ · `/donate_top` อันดับผู้โดเนท · `/on_duty` คนมาทำงานวันนี้ · `/sheets_format` จัดรูปแบบชีต · `/health` สถานะระบบ · `/reload_config` โหลด config"
 )
 
 
@@ -306,13 +306,13 @@ class AdminPanelCog(commands.Cog):
                 ]),
                 ("🖥️ ระบบ", [
                     ("🩺 สถานะระบบ · 🔄 โหลด config ใหม่ · 📖 คำสั่งทั้งหมด", ""),
-                    ("🎨 จัดรูปแบบชีต", "ทำสี/หัวตาราง/กล่องสรุปใน Google Sheets ใหม่ — ข้อมูลเดิมไม่หาย"),
+                    ("🎨 จัดรูปแบบชีต", "ทำสีและกล่องสรุปใน Google Sheets ใหม่ ข้อมูลเดิมไม่หาย"),
                 ]),
                 ("⚙️ ตั้งค่า", [
                     ("⚙️ ตั้งค่าร้าน", "ห้อง/Role ที่บอทใช้ · ห้องบริการ · ราคา · VIP · ส่วนแบ่ง · โค้ดส่วนลด · การชำระเงิน"),
                 ]),
             ],
-            footer="ควรโพสต์ในห้องที่เห็นเฉพาะแอดมิน — คนอื่นกดก็ใช้ไม่ได้",
+            footer="โพสต์ไว้ในห้องที่เห็นแค่แอดมินนะ คนอื่นกดไปก็ใช้ไม่ได้",
             guild=interaction.guild,
         )
         await interaction.channel.send(embed=embed, view=AdminPanel())

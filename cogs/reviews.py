@@ -164,7 +164,7 @@ class ReviewForm(discord.ui.View):
     async def write(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not self.stars or not self.spice:
             await interaction.response.send_message(
-                "กรุณาเลือกคะแนนให้ครบทั้ง 2 ช่องก่อนค่ะ", ephemeral=True
+                "เลือกคะแนนให้ครบทั้ง 2 ช่องก่อนนะคะ", ephemeral=True
             )
             return
         await interaction.response.send_modal(ReviewTextModal(self))
@@ -175,7 +175,7 @@ class ReviewForm(discord.ui.View):
         self.stop()
         await interaction.edit_original_response(
             embed=discord.Embed(
-                title="💌 ส่งรีวิวเรียบร้อย" if ok else "⚠️ ส่งรีวิวไม่สำเร็จ",
+                title="💌 ได้รับรีวิวแล้ว" if ok else "⚠️ ส่งรีวิวไม่สำเร็จ",
                 description=message,
                 color=COLOR_OK if ok else COLOR_DANGER,
             ),
@@ -292,7 +292,7 @@ class ReviewsCog(commands.Cog):
             await interaction.response.send_message("ไม่พบรีวิวนี้ค่ะ", ephemeral=True)
             return
         if review["status"] != "PENDING":
-            await interaction.response.send_message("รีวิวนี้ถูกดำเนินการไปแล้วค่ะ", ephemeral=True)
+            await interaction.response.send_message("รีวิวนี้มีแอดมินกดไปแล้วค่ะ", ephemeral=True)
             return
 
         channel = self.bot.get_channel(self.cfg.channel_id("review"))
@@ -330,7 +330,7 @@ class ReviewsCog(commands.Cog):
             await interaction.response.send_message("ไม่พบรีวิวนี้ค่ะ", ephemeral=True)
             return
         if review["status"] != "PENDING":
-            await interaction.response.send_message("รีวิวนี้ถูกดำเนินการไปแล้วค่ะ", ephemeral=True)
+            await interaction.response.send_message("รีวิวนี้มีแอดมินกดไปแล้วค่ะ", ephemeral=True)
             return
 
         await interaction.response.defer()

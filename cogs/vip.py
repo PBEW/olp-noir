@@ -96,7 +96,7 @@ class VipShopView(discord.ui.View):
             )
         else:
             embed.add_field(name="แพ็กเกจที่เลือก", value="*ยังไม่เลือก*", inline=False)
-        embed.set_footer(text="ระบบจะส่ง QR ชำระเงินไปที่ DM ของคุณ")
+        embed.set_footer(text="เลือกแล้วเดี๋ยวบอทส่ง QR ไปทาง DM ค่ะ")
         return embed
 
     @discord.ui.button(
@@ -145,7 +145,7 @@ class VipShopView(discord.ui.View):
                 description=(
                     f"คำสั่งซื้อ `V#{order_id}` · {pkg['name']}\n"
                     f"ยอดชำระ **{money(total)}**\n"
-                    "กรุณาตรวจสอบ DM ของบอทและส่งภาพสลิปกลับมาได้เลยค่ะ" + note
+                    "ดู QR ใน DM ของบอท แล้วส่งรูปสลิปกลับมาในนั้นนะคะ" + note
                 ),
                 color=COLOR_OK,
             ),
@@ -357,11 +357,11 @@ class VipCog(commands.Cog):
             self.bot,
             order["customer_id"],
             embed=discord.Embed(
-                title="🎉 ยืนยันสิทธิ์ VIP เรียบร้อย",
+                title="🎉 ได้ VIP แล้ว!",
                 description=(
                     f"ระดับ **{tier_cfg.get('emoji', '')} {tier_cfg['name']}**\n"
                     f"หมดอายุ: **{fmt_datetime(new_expiry_local, self.cfg.tz)}**\n\n"
-                    "ครั้งต่อไปที่ใช้บริการ ระบบจะคิดราคา/สิทธิ์ฟรีตามระดับให้อัตโนมัติค่ะ 💎"
+                    "มาใช้บริการครั้งหน้า ราคาและสิทธิ์ฟรีจะคิดตามระดับ VIP ให้เลยค่ะ 💎"
                 ),
                 color=COLOR_OK,
             ),
@@ -444,7 +444,7 @@ class VipCog(commands.Cog):
         if req is None:
             return False, "ไม่พบคำขอนี้"
         if req["status"] != "PENDING":
-            return False, "คำขอนี้ถูกดำเนินการไปแล้วค่ะ"
+            return False, "คำขอนี้มีแอดมินกดไปแล้วค่ะ"
 
         to_tier_cfg = self.cfg.vip_tier(req["to_tier"])
         if to_tier_cfg is None:
@@ -480,7 +480,7 @@ class VipCog(commands.Cog):
             self.bot,
             req["user_id"],
             embed=discord.Embed(
-                title="🎁 อัปเกรด VIP ฟรีเรียบร้อย!",
+                title="🎁 อัปเกรด VIP ฟรีแล้ว!",
                 description=(
                     f"ยินดีด้วยค่ะ คุณสะสมครบ {req['streak_months']} เดือน "
                     f"ได้รับการอัปเกรดเป็น **{to_tier_cfg['name']}** ฟรี 1 เดือน\n"
@@ -498,7 +498,7 @@ class VipCog(commands.Cog):
         if req is None:
             return False, "ไม่พบคำขอนี้"
         if req["status"] != "PENDING":
-            return False, "คำขอนี้ถูกดำเนินการไปแล้วค่ะ"
+            return False, "คำขอนี้มีแอดมินกดไปแล้วค่ะ"
         await self.db.update_upgrade_request(
             request_id, status="REJECTED", handled_at=to_iso(now_utc()), handled_by=admin.id
         )

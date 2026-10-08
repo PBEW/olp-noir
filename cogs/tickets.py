@@ -59,7 +59,7 @@ class TicketCloseButton(
     async def callback(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
         cog: TicketsCog = interaction.client.get_cog("TicketsCog")  # type: ignore[assignment]
         await cog.close_ticket(self.ticket_id, reason=f"ปิดโดย {interaction.user.display_name}")
-        await interaction.response.send_message("ปิดการสนทนาเรียบร้อยค่ะ", ephemeral=True)
+        await interaction.response.send_message("ปิดแชทแล้วค่ะ", ephemeral=True)
 
 
 def ticket_admin_view(ticket_id: int) -> discord.ui.View:
@@ -86,7 +86,7 @@ class TicketsCog(commands.Cog):
         existing = await self.db.open_ticket_for_customer(interaction.user.id)
         if existing is not None:
             await interaction.response.send_message(
-                "คุณมีรายการสอบถามที่ยังเปิดอยู่ค่ะ กรุณาคุยต่อใน DM ของบอทได้เลย",
+                "แชทเดิมยังเปิดอยู่ค่ะ คุยต่อใน DM ของบอทได้เลย",
                 ephemeral=True,
             )
             return
@@ -116,7 +116,7 @@ class TicketsCog(commands.Cog):
         if dm is None:
             await self.db.update_ticket(ticket_id, status="CLOSED", closed_at=now)
             await interaction.response.send_message(
-                "ส่ง DM ไม่ได้ค่ะ กรุณาเปิดรับข้อความ DM จากสมาชิกในเซิร์ฟเวอร์ก่อนนะคะ",
+                "บอทส่ง DM หาคุณไม่ได้ค่ะ ลองเปิดรับ DM จากสมาชิกในเซิร์ฟเวอร์ก่อนนะคะ",
                 ephemeral=True,
             )
             return
@@ -136,7 +136,7 @@ class TicketsCog(commands.Cog):
             await self.db.update_ticket(ticket_id, admin_msg_id=msg.id)
 
         await interaction.response.send_message(
-            "เปิดรายการสอบถามแล้วค่ะ กรุณาตรวจสอบ DM ของบอท", ephemeral=True
+            "เปิดแชทแล้วค่ะ ไปคุยต่อใน DM ของบอทได้เลย", ephemeral=True
         )
 
     # ------------------------------------------------------------ รับเรื่อง
@@ -158,7 +158,7 @@ class TicketsCog(commands.Cog):
         busy = await self.db.active_ticket_for_admin(interaction.user.id)
         if busy is not None:
             await interaction.response.send_message(
-                f"คุณกำลังคุยกับลูกค้าในรายการ `T#{busy['id']}` อยู่ กรุณาปิดรายการนั้นก่อนค่ะ",
+                f"คุณกำลังคุยกับลูกค้าในรายการ `T#{busy['id']}` อยู่ ปิดอันนั้นก่อนนะคะ",
                 ephemeral=True,
             )
             return
@@ -180,8 +180,8 @@ class TicketsCog(commands.Cog):
             embed=discord.Embed(
                 title="✅ เจ้าหน้าที่รับเรื่องแล้ว",
                 description=(
-                    "พิมพ์ข้อความใน DM นี้ได้เลยค่ะ ระบบจะส่งต่อให้เจ้าหน้าที่ทันที\n"
-                    f"*หากไม่มีการสนทนาเกิน {timeout} นาที ระบบจะปิดรายการอัตโนมัติ*"
+                    "พิมพ์มาในนี้ได้เลย เจ้าหน้าที่จะเห็นข้อความทันทีค่ะ\n"
+                    f"*ถ้าเงียบไปเกิน {timeout} นาที บอทจะปิดแชทนี้ให้นะคะ*"
                 ),
                 color=COLOR_OK,
             ),
@@ -194,7 +194,7 @@ class TicketsCog(commands.Cog):
                 title=f"💬 เชื่อมต่อกับลูกค้าแล้ว · T#{ticket_id}",
                 description=(
                     f"ลูกค้า: <@{ticket['customer_id']}>\n"
-                    "พิมพ์ข้อความใน DM นี้เพื่อตอบลูกค้าได้เลยค่ะ"
+                    "พิมพ์ในนี้ ลูกค้าจะเห็นข้อความทันที"
                 ),
                 color=COLOR_OK,
             ),

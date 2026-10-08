@@ -84,7 +84,7 @@ class RequestPanelCog(commands.Cog):
 
         embed = panel_embed(
             "✨ OLP-Noir · บริการลูกค้า",
-            "เลือกรายการที่ต้องการได้เลยค่ะ บอทจะติดต่อกลับทาง **DM** 💌",
+            "อยากได้อะไร กดเลือกด้านล่าง บอทตอบกลับทาง **DM** นะคะ 💌",
             [
                 ("💬 ติดต่อร้าน", [
                     ("💬 สอบถามเจ้าหน้าที่", "คุยกับทีมงานแบบตัวต่อตัวผ่าน DM ของบอท"),
@@ -98,7 +98,7 @@ class RequestPanelCog(commands.Cog):
                     ("🏆 อันดับผู้โดเนท", "Top ผู้สนับสนุนประจำเดือน"),
                 ]),
             ],
-            footer="กรุณาเปิดรับข้อความ DM จากสมาชิกในเซิร์ฟเวอร์ก่อนใช้งานนะคะ",
+            footer="บอทตอบทาง DM — เปิดรับ DM จากสมาชิกในเซิร์ฟเวอร์ไว้ด้วยนะคะ",
             guild=interaction.guild,
         )
         await interaction.channel.send(embed=embed, view=RequestPanel())

@@ -144,7 +144,7 @@ class PaymentsCog(commands.Cog):
             self.cfg,
             title="💳 สรุปยอดชำระเงิน",
             description=(
-                f"บิล `#{job['id']}` — {self.cfg.service_names(job['services'])}\n"
+                f"บิล `#{job['id']}` · {self.cfg.service_names(job['services'])}\n"
                 f"พนักงาน: <@{job['staff_id']}>"
             ),
             amount=job["total_price"],
@@ -213,7 +213,7 @@ class PaymentsCog(commands.Cog):
             return
         if not record.get("slip_url"):
             await interaction.response.send_message(
-                "ยังไม่พบภาพสลิป กรุณาส่งภาพสลิปเข้ามาใน DM ก่อนค่ะ", ephemeral=True
+                "ยังไม่เห็นรูปสลิปเลยค่ะ ส่งรูปมาใน DM นี้ก่อนนะคะ", ephemeral=True
             )
             return
         if record["status"] not in ("ACCEPTED", "AWAITING_PAYMENT", "SLIP_PENDING"):
@@ -261,7 +261,7 @@ class PaymentsCog(commands.Cog):
         await interaction.edit_original_response(
             embed=discord.Embed(
                 title="📤 ส่งสลิปให้แอดมินแล้ว",
-                description="รอแอดมินตรวจสอบสักครู่นะคะ ระบบจะแจ้งผลกลับมาทาง DM นี้ค่ะ",
+                description="รอแอดมินเช็กแป๊บนึงนะคะ ได้ผลแล้วจะแจ้งในนี้ค่ะ",
                 color=COLOR_INFO,
             ),
             view=None,
@@ -328,7 +328,7 @@ class PaymentsCog(commands.Cog):
         if job is None:
             return False, "ไม่พบบิลนี้ในระบบ"
         if job["status"] in ("PAID", "COMPLETED"):
-            return False, "บิลนี้ชำระเงินเรียบร้อยแล้ว"
+            return False, "บิลนี้จ่ายแล้ว"
         if job["status"] == "CANCELLED":
             return False, "บิลนี้ถูกยกเลิกไปแล้ว"
 
@@ -415,7 +415,7 @@ class PaymentsCog(commands.Cog):
                 description=(
                     f"บิล `#{job['id']}` ถูก {staff.mention} ปฏิเสธ{reason_text}\n"
                     f"ลูกค้า: <@{job['customer_id']}> · บริการ: {self.cfg.service_names(job['services'])}\n"
-                    "กรุณาตรวจสอบและคีย์บิลใหม่ให้ถูกต้องค่ะ"
+                    "เช็กแล้วเปิดบิลใหม่อีกครั้งนะคะ"
                 ),
                 color=COLOR_DANGER,
             )
