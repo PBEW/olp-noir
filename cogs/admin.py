@@ -81,5 +81,26 @@ class AdminCog(commands.Cog):
         )
 
 
+    async def format_sheets(self) -> discord.Embed:
+        if not self.bot.sheets.ready:
+            return discord.Embed(description="⚠️ ยังไม่ได้เชื่อม Google Sheets (google_sheets.enabled / credentials.json)", color=COLOR_INFO)
+        title = await self.db.get_meta("current_cycle") or cycle_title(self.cfg)
+        done = await self.bot.sheets.restyle(title)
+        url = await self.bot.sheets.spreadsheet_url()
+        return discord.Embed(
+            title="🎨 จัดรูปแบบ Google Sheets แล้ว",
+            description="\n".join(f"✅ `{t}`" for t in done) + (f"\n\n[เปิดชีต]({url})" if url else ""),
+            color=COLOR_OK,
+        )
+
+    @app_commands.command(name="sheets_format", description="จัดรูปแบบ Google Sheets ใหม่ (สี/หัวตาราง/สรุป) — ข้อมูลเดิมไม่หาย (แอดมิน)")
+    async def sheets_format(self, interaction: discord.Interaction) -> None:
+        if not self._guard(interaction):
+            await interaction.response.send_message("เฉพาะแอดมินเท่านั้นค่ะ", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        await interaction.followup.send(embed=await self.format_sheets(), ephemeral=True)
+
+
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(AdminCog(bot))
