@@ -215,25 +215,35 @@ class SchedulerCog(commands.Cog):
         current_start = cycle_start_local(now_local, self.cfg)
         previous_start = current_start - dt.timedelta(days=7)
 
+        payments = self.bot.get_cog("PaymentsCog")
+        synced = await payments.sync_unlogged_to_sheet()  # ลงชีตบิลที่ค้างก่อนสรุป
+
         summary = await self.build_summary(previous_start, current_start)
 
+        closed_title = cycle_title(self.cfg, previous_start)
         new_title = cycle_title(self.cfg, now_local)
         created = await self.bot.sheets.create_cycle_sheet(new_title)
         await self.db.set_meta("current_cycle", new_title)
         await self.db.set_meta("last_cutoff", current_start.date().isoformat())
 
-        summary.add_field(
-            name="ชีตรอบใหม่",
-            value=f"`{new_title}`" + ("" if created else " *(ยังไม่ได้เปิดใช้ Google Sheets)*"),
-            inline=False,
-        )
+        if self.bot.sheets.ready:
+            sheet_note = (
+                f"📒 บิลของรอบที่ตัดอยู่ในแท็บ **`{closed_title}`**\n"
+                f"🆕 แท็บรอบใหม่ `{new_title}` (ยังว่างจนกว่าจะมีบิลใหม่)"
+            )
+            if synced["jobs"] or synced["donations"]:
+                sheet_note += f"\n🔁 ลงชีตย้อนหลังให้ {synced['jobs']} บิล · {synced['donations']} โดเนท"
+            if synced["failed"]:
+                sheet_note += f"\n⚠️ ลงชีตไม่สำเร็จ {synced['failed']} รายการ (ดู log)"
+        else:
+            sheet_note = f"`{new_title}` *(ยังไม่ได้เชื่อม Google Sheets)*"
+        summary.add_field(name="📊 Google Sheets", value=sheet_note, inline=False)
         summary.add_field(
             name="ตัดรอบครั้งถัดไป",
             value=fmt_datetime(next_cutoff_local(now_local, self.cfg), self.cfg.tz),
             inline=False,
         )
 
-        payments = self.bot.get_cog("PaymentsCog")
         await payments.notify_admin(embed=summary)
 
         attendance = self.bot.get_cog("AttendanceCog")
