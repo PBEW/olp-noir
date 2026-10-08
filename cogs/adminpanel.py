@@ -169,7 +169,7 @@ HELP_TEXT = (
     "`/bill info` ดูบิล · `/bill paid` ยืนยันชำระด้วยมือ · `/bill cancel` ยกเลิกบิล\n\n"
     "**อื่น ๆ**\n"
     "`/vip_grant` ให้ VIP · `/attendance_fix` แก้เวลาเข้างาน · `/cutoff` ตัดรอบ · `/summary` สรุปยอด\n"
-    "`/attendance_report` ชั่วโมงงาน · `/daily_checkin` โพสต์กระดานเช็คชื่อ · `/donate_top` อันดับผู้โดเนท · `/on_duty` คนมาทำงานวันนี้ · `/health` สถานะระบบ · `/reload_config` โหลด config"
+    "`/attendance_report` ชั่วโมงงาน · `/daily_checkin` โพสต์กระดานเช็คชื่อ · `/donate_top` อันดับผู้โดเนท · `/on_duty` คนมาทำงานวันนี้ · `/sheets_format` จัดรูปแบบชีต · `/health` สถานะระบบ · `/reload_config` โหลด config"
 )
 
 
@@ -259,6 +259,12 @@ class AdminPanel(discord.ui.View):
             embed=discord.Embed(description="โหลด config ใหม่เรียบร้อยค่ะ", color=COLOR_OK), ephemeral=True
         )
 
+    @discord.ui.button(label="จัดรูปแบบชีต", emoji="🎨", style=discord.ButtonStyle.secondary, custom_id="olp:admin:sheets", row=3)
+    async def sheets(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        embed = await interaction.client.get_cog("AdminCog").format_sheets()
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
     @discord.ui.button(label="ตั้งค่าร้าน", emoji="⚙️", style=discord.ButtonStyle.primary, custom_id="olp:admin:settings", row=3)
     async def settings(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.client.get_cog("ShopSettingsCog").open_settings(interaction)
@@ -300,6 +306,7 @@ class AdminPanelCog(commands.Cog):
                 ]),
                 ("🖥️ ระบบ", [
                     ("🩺 สถานะระบบ · 🔄 โหลด config ใหม่ · 📖 คำสั่งทั้งหมด", ""),
+                    ("🎨 จัดรูปแบบชีต", "ทำสี/หัวตาราง/กล่องสรุปใน Google Sheets ใหม่ — ข้อมูลเดิมไม่หาย"),
                 ]),
                 ("⚙️ ตั้งค่า", [
                     ("⚙️ ตั้งค่าร้าน", "ห้อง/Role ที่บอทใช้ · ห้องบริการ · ราคา · VIP · ส่วนแบ่ง · โค้ดส่วนลด · การชำระเงิน"),
