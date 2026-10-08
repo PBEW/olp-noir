@@ -353,7 +353,7 @@ class OpenBillWizard(discord.ui.View):
 
         self.stop()
         await interaction.edit_original_response(
-            embed=job_embed(self.cfg, job, title="✅ เปิดบิลเรียบร้อย", color=COLOR_OK),
+            embed=job_embed(self.cfg, job, title="✅ เปิดบิลแล้ว", color=COLOR_OK),
             view=None,
         )
 
@@ -555,6 +555,20 @@ class ReceptionPanel(discord.ui.View):
             return
         await interaction.response.send_modal(BillActionModal("info"))
 
+    @discord.ui.button(
+        label="คนมาทำงานวันนี้",
+        emoji="👥",
+        style=discord.ButtonStyle.secondary,
+        custom_id="olp:panel:working_today",
+        row=2,
+    )
+    async def working_today(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not is_reception(interaction.user, interaction.client.cfg):
+            await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
+            return
+        embed = await interaction.client.get_cog("AttendanceCog").on_duty_embed()
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 class BillActionModal(discord.ui.Modal):
     """ยืนยันชำระด้วยมือ / ยกเลิกบิล / ดูบิล จากแผงรีเซปชั่น (เหมือน /bill paid · /bill cancel · /bill info)"""
@@ -569,7 +583,7 @@ class BillActionModal(discord.ui.Modal):
         self.reason: discord.ui.TextInput | None = None
         if action == "cancel":
             self.reason = discord.ui.TextInput(
-                label="เหตุผล (ไม่บังคับ — ส่งให้ลูกค้า/พนักงาน)", required=False, max_length=200
+                label="เหตุผล (ไม่ใส่ก็ได้ ส่งให้ลูกค้า/พนักงาน)", required=False, max_length=200
             )
             self.add_item(self.reason)
 
@@ -606,12 +620,15 @@ class BillActionModal(discord.ui.Modal):
 def reception_panel_embed(guild: discord.Guild | None) -> discord.Embed:
     return panel_embed(
         "🎛️ OLP-Noir · Reception",
-        "แผงงานรีเซปชั่น — ใช้ได้ทั้ง **แอดมิน** และ **Role รีเซปชั่น** · ผลลัพธ์เห็นเฉพาะคนกด",
+        "แผงงานรีเซปชั่น ใช้ได้ทั้ง **แอดมิน** และ **Role รีเซปชั่น** ผลลัพธ์เห็นแค่คนกด",
         [
             ("🧾 งานบิล", [
                 ("🧾 เปิดบิลใหม่", "เลือกลูกค้า · พนักงาน · บริการ · ห้อง แล้วคำนวณราคาให้อัตโนมัติ"),
                 ("⏱️ ต่อเวลา", "เปิดบิลต่อเวลาและขยายเวลาจบของบิลเดิม"),
                 ("📋 งานที่กำลังดำเนินอยู่", "ดูบิลที่ยังไม่จบเวลา"),
+            ]),
+            ("👥 ทีม", [
+                ("👥 คนมาทำงานวันนี้", "ดูว่าพนักงานคนไหนกดเข้างานแล้ว ก่อนเลือกพนักงานเปิดบิล"),
             ]),
             ("💳 การเงิน", [
                 ("✅ ยืนยันชำระเงิน", "ลูกค้าจ่ายแล้วแต่ไม่ได้ส่งสลิปในบอท (เหมือน /bill paid)"),
@@ -855,7 +872,7 @@ class ReceptionCog(commands.Cog):
         payments = self.bot.get_cog("PaymentsCog")
         await payments.start_job_payment(job)
         await payments.notify_admin_text(
-            f"✅ <@{job['staff_id']}> รับงานบิล `#{job_id}` แล้ว — ส่งยอดชำระให้ลูกค้าเรียบร้อย"
+            f"✅ <@{job['staff_id']}> รับงานบิล `#{job_id}` แล้ว ส่งยอดให้ลูกค้าแล้ว"
         )
 
     async def staff_reject_prompt(self, interaction: discord.Interaction, job_id: int) -> None:
@@ -867,14 +884,14 @@ class ReceptionCog(commands.Cog):
             await interaction.response.send_message("ปุ่มนี้สำหรับพนักงานที่ถูกจ่ายงานค่ะ", ephemeral=True)
             return
         if job["status"] != "PENDING_STAFF":
-            await interaction.response.send_message("บิลนี้ถูกดำเนินการไปแล้วค่ะ", ephemeral=True)
+            await interaction.response.send_message("บิลนี้มีคนกดไปแล้วค่ะ", ephemeral=True)
             return
         await interaction.response.send_modal(JobRejectReasonModal(job_id))
 
     async def staff_reject(self, interaction: discord.Interaction, job_id: int, reason: str) -> None:
         job = await self.db.get_job(job_id)
         if job is None or interaction.user.id != job["staff_id"] or job["status"] != "PENDING_STAFF":
-            await interaction.response.send_message("บิลนี้ถูกดำเนินการไปแล้วค่ะ", ephemeral=True)
+            await interaction.response.send_message("บิลนี้มีคนกดไปแล้วค่ะ", ephemeral=True)
             return
 
         await interaction.response.defer()

@@ -46,7 +46,7 @@ class DMRouterCog(commands.Cog):
             await message.reply(
                 embed=discord.Embed(
                     title="📎 รอภาพสลิป",
-                    description="กรุณาส่ง **ภาพสลิปโอนเงิน** เข้ามาใน DM นี้ แล้วกดปุ่มยืนยันค่ะ",
+                    description="ส่ง **รูปสลิปโอนเงิน** มาในนี้ แล้วกดปุ่มยืนยันนะคะ",
                     color=COLOR_INFO,
                 )
             )
@@ -58,7 +58,7 @@ class DMRouterCog(commands.Cog):
                     title="🤖 OLP-Noir",
                     description=(
                         "ตอนนี้ยังไม่มีรายการที่กำลังดำเนินอยู่ค่ะ\n"
-                        "กรุณาใช้ปุ่มที่หน้าแผงบริการในเซิร์ฟเวอร์เพื่อเริ่มรายการใหม่นะคะ"
+                        "ถ้าต้องการอะไร กดปุ่มที่แผงบริการในเซิร์ฟเวอร์ได้เลยนะคะ"
                     ),
                     color=COLOR_INFO,
                 )

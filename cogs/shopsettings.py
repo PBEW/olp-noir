@@ -152,7 +152,7 @@ def home_embed(cfg) -> discord.Embed:
     pay_ok = bool(pay) and "X" not in pay.upper() and "x" not in pay
     return panel_embed(
         "⚙️ ตั้งค่าร้าน",
-        "เลือกหมวดจากเมนูด้านล่าง — บันทึกลง `config.json` และ **มีผลทันที** ไม่ต้องรีสตาร์ท",
+        "เลือกหมวดจากเมนูด้านล่าง แก้แล้วใช้ได้เลย ไม่ต้องรีสตาร์ท",
         [
             ("🧭 ระบบบอท", [
                 (f"🧭 ห้อง · Role · เวลา · {'✅ ครบ' if not missing else f'⚠️ ขาด {missing}'}",
@@ -741,7 +741,7 @@ class BotSetupView(Section):
         embed = discord.Embed(
             title="🧭 ตั้งค่าระบบบอท",
             description=(
-                "1️⃣ เลือกห้อง/Role จากเมนูแรก　2️⃣ เลือกจากเมนูที่สอง (หรือกด ✏️ ใส่ ID) — **บันทึกทันที**\n"
+                "1️⃣ เลือกห้อง/Role จากเมนูแรก　2️⃣ เลือกจากเมนูที่สอง (หรือกด ✏️ ใส่ ID) บันทึกให้เลย\n"
                 + (f"⚠️ ยังไม่ได้ตั้ง **{missing}** รายการที่จำเป็น" if missing else "✅ ตั้งห้องและ Role ที่จำเป็นครบแล้ว")
             ),
             color=COLOR_OK if not missing else COLOR_WARN,

@@ -101,7 +101,7 @@ class SchedulerCog(commands.Cog):
                     f"บิล `#{job['id']}` · ลูกค้า <@{job['customer_id']}>\n"
                     f"บริการ: {self.cfg.service_names(job['services'])}\n"
                     f"ห้อง: {self.cfg.room_name(job.get('room'))}\n"
-                    f"เริ่ม {discord_ts(start)} — เตรียมตัวได้เลยค่ะ"
+                    f"เริ่ม {discord_ts(start)} เตรียมตัวได้แล้วค่ะ"
                 ),
                 color=COLOR_WARN,
             ),
@@ -114,7 +114,7 @@ class SchedulerCog(commands.Cog):
                 description=(
                     f"บิล `#{job['id']}` · พนักงาน <@{job['staff_id']}>\n"
                     f"ห้อง: {self.cfg.room_name(job.get('room'))}\n"
-                    f"เริ่ม {discord_ts(start)} — เตรียมเข้างานได้เลยค่ะ"
+                    f"เริ่ม {discord_ts(start)} เตรียมเข้าห้องได้แล้วค่ะ"
                 ),
                 color=COLOR_WARN,
             ),
@@ -126,7 +126,7 @@ class SchedulerCog(commands.Cog):
             title=f"⌛ อีก {minutes} นาทีจะหมดเวลา",
             description=(
                 f"บิล `#{job['id']}` จะจบเวลา {discord_ts(end)}\n"
-                "หากต้องการต่อเวลา แจ้งแอดมินเพื่อเปิดบิลต่อเวลาได้เลยค่ะ"
+                "อยากต่อเวลา ทักแอดมินได้เลยนะคะ"
             ),
             color=COLOR_WARN,
         )
@@ -183,7 +183,7 @@ class SchedulerCog(commands.Cog):
                     description=(
                         f"สลิป{label} `#{ref}` รอตรวจเกิน **{self.cfg.slip_review_minutes} นาที** แล้ว\n"
                         f"ลูกค้า <@{customer}> · ยอด **{money(amount)}**\n"
-                        "กด ✅ / ❌ ที่ข้อความสลิปด้านบนได้เลยค่ะ"
+                        "กด ✅ / ❌ ที่ข้อความสลิปด้านบน"
                     ),
                     color=COLOR_WARN,
                 ),
@@ -316,7 +316,7 @@ class SchedulerCog(commands.Cog):
             return
         await interaction.response.defer(ephemeral=True)
         await self.run_cutoff()
-        await interaction.followup.send("ตัดรอบเรียบร้อย ส่งสรุปเข้าห้องแอดมินแล้วค่ะ", ephemeral=True)
+        await interaction.followup.send("ตัดรอบแล้ว สรุปอยู่ในห้องแอดมินค่ะ", ephemeral=True)
 
     @app_commands.command(name="summary", description="ดูสรุปยอดของรอบปัจจุบัน (แอดมิน)")
     async def summary_command(self, interaction: discord.Interaction) -> None:

@@ -143,7 +143,7 @@ class AttendanceCog(commands.Cog):
         now = now_utc()
         row_id = await self.db.create_attendance(interaction.guild_id or self.cfg.guild_id, user.id, to_iso(now))
         await interaction.response.send_message(
-            f"🟢 บันทึกเข้างานวันนี้แล้ว เวลา **{fmt_time(now, self.cfg.tz)}** น. ขอให้เป็นคืนที่ดีนะคะ\n"
+            f"🟢 บันทึกเข้างานวันนี้แล้ว เวลา **{fmt_time(now, self.cfg.tz)}** น. 🤍\n"
             f"*ไม่ต้องกดออกงาน บอทจะตัดออกงานให้อัตโนมัติตอน {self._cutoff_today():%H:%M} น.*",
             ephemeral=True,
         )
