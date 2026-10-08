@@ -84,12 +84,17 @@ class AdminCog(commands.Cog):
     async def format_sheets(self) -> discord.Embed:
         if not self.bot.sheets.ready:
             return discord.Embed(description="⚠️ ยังไม่ได้เชื่อม Google Sheets (google_sheets.enabled / credentials.json)", color=COLOR_INFO)
+        synced = await self.bot.get_cog("PaymentsCog").sync_unlogged_to_sheet()
         title = await self.db.get_meta("current_cycle") or cycle_title(self.cfg)
         done = await self.bot.sheets.restyle(title)
         url = await self.bot.sheets.spreadsheet_url()
+        lines = [f"✅ `{t}`" for t in done]
+        lines.append(f"🔁 ลงชีตย้อนหลัง: {synced['jobs']} บิล · {synced['donations']} โดเนท")
+        if synced["failed"]:
+            lines.append(f"⚠️ ลงไม่สำเร็จ {synced['failed']} รายการ — ดู Console / logs")
         return discord.Embed(
-            title="🎨 จัดรูปแบบ Google Sheets แล้ว",
-            description="\n".join(f"✅ `{t}`" for t in done) + (f"\n\n[เปิดชีต]({url})" if url else ""),
+            title="🎨 จัดรูปแบบ & ซิงก์ Google Sheets แล้ว",
+            description="\n".join(lines) + (f"\n\n[เปิดชีต]({url})" if url else ""),
             color=COLOR_OK,
         )
 

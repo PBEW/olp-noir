@@ -449,9 +449,38 @@ class PaymentsCog(commands.Cog):
             self.cfg.vip_tier_name(job.get("vip_tier")) if job.get("vip_tier") else "ลูกค้าทั่วไป",
             job.get("note") or "",
         ]
-        title = await self.db.get_meta("current_cycle") or cycle_title(self.cfg)
+        # ลงแท็บของรอบที่บิลนี้ชำระ (ไม่ใช่รอบปัจจุบันเสมอไป — กันบิลย้อนหลังไปลงผิดแท็บ)
+        paid_at = from_iso(job.get("paid_at")) or now_utc()
+        title = cycle_title(self.cfg, paid_at.astimezone(tz))
         if await self.bot.sheets.append_job_row(title, row):
             await self.db.update_job(job["id"], sheet_logged=1)
+
+    async def sync_unlogged_to_sheet(self) -> dict:
+        """ลงชีตย้อนหลังให้บิล/โดเนทที่ชำระแล้วแต่ยังไม่ได้ลง (เช่น ตอนนั้น Sheets ล่ม / ยังไม่ได้เปิดใช้)"""
+        result = {"jobs": 0, "donations": 0, "failed": 0}
+        if not self.bot.sheets.ready:
+            return result
+        jobs = await self.db.fetchall(
+            "SELECT id FROM jobs WHERE status IN ('PAID','COMPLETED') AND COALESCE(sheet_logged,0) = 0 ORDER BY paid_at"
+        )
+        for row in jobs:
+            job = await self.db.get_job(row["id"])
+            await self.log_job_to_sheet(job)
+            if (await self.db.get_job(row["id"])).get("sheet_logged"):
+                result["jobs"] += 1
+            else:
+                result["failed"] += 1
+        donate = self.bot.get_cog("DonateCog")
+        if donate is not None:
+            for d in await self.db.fetchall(
+                "SELECT * FROM donations WHERE status = 'PAID' AND COALESCE(sheet_logged,0) = 0 ORDER BY paid_at"
+            ):
+                await donate._log_to_sheet(d)
+                if (await self.db.get_donation(d["id"])).get("sheet_logged"):
+                    result["donations"] += 1
+                else:
+                    result["failed"] += 1
+        return result
 
     # -------------------------------------------------------------- utils
     async def notify_admin(
