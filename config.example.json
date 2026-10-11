@@ -1,7 +1,6 @@
 {
   "guild_id": 0,
   "timezone": "Asia/Bangkok",
-
   "_comment_channels": "admin = ห้องหลัก | ticket = ลูกค้าทัก DM / รับเรื่อง | slip = สลิปรอยืนยัน, สลิปค้าง, ส่ง DM ยอดไม่สำเร็จ | attendance = พนักงานเข้างาน | log = ประวัติแก้ตั้งค่า — ห้องที่ไม่ตั้ง (0) จะส่งเข้าห้อง admin แทน · ตั้งผ่าน /panel_admin → ⚙️ ตั้งค่าร้าน → 🧭 ระบบบอท ได้",
   "channels": {
     "admin": 0,
@@ -12,39 +11,33 @@
     "donate": 0,
     "log": 0
   },
-
   "roles": {
     "admin": 0,
     "reception": 0,
     "staff": 0,
     "on_duty": 0
   },
-
   "_comment_staff": "roles.staff ใส่ได้หลาย Role เป็น list เช่น [111, 222] — ใช้กับเมนูพนักงาน/เข้างาน และรายชื่อพนักงานตอนเปิดบิล (แสดงได้สูงสุด 25 คน ถ้าเกินจะเปลี่ยนเป็นช่องค้นหา)",
   "_comment_donate": "โดเนท: channels.donate = ห้องประกาศขอบคุณ (0 = ไม่ประกาศ), staff_percent = % ที่โฮสต์ได้เมื่อโดเนทให้โฮสต์โดยตรง (ที่เหลือเข้าร้าน)",
   "donate": {
     "min_amount": 20,
     "staff_percent": 100
   },
-
   "_comment_attendance": "ระบบเข้างาน: พนักงานกดเข้างานทำงานวันนี้อย่างเดียว บอทตัดออกงานทุกคนอัตโนมัติทุกวันตามเวลา cutoff_hour:cutoff_minute (เวลาไทย) แล้วส่งสรุปรายชื่อคนเข้างานเข้าห้องแอดมิน",
   "attendance": {
     "cutoff_hour": 1,
     "cutoff_minute": 0
   },
-
   "payment": {
     "account_name": "ร้าน OLP-Noir",
     "promptpay": "0xx-xxx-xxxx",
     "qr_image_url": "",
     "note": "โอนแล้วส่งภาพสลิปกลับมาที่ DM นี้ได้เลยค่ะ"
   },
-
   "_comment_vip": "vip.commission_percent = % ค่าคอมที่พนักงานได้ เมื่อลูกค้าเลือกพนักงานคนนั้นตอนซื้อ VIP",
   "vip": {
     "commission_percent": 20
   },
-
   "_comment_vip_tiers": "ลำดับชั้น VIP เรียงจากต่ำไปสูง ต้องใส่ role_id ให้ครบ ระดับ obsession ห้ามซื้อเอง (purchasable=false) ให้ได้จากแอดมินอนุมัติหรือสะสมครบ 12 เดือนเท่านั้น",
   "vip_tiers": [
     {
@@ -78,14 +71,44 @@
       "upgrade_streak_months": null
     }
   ],
-
   "vip_packages": [
-    { "key": "lace_month", "tier": "lace", "name": "VIP Lace รายเดือน", "emoji": "💎", "price": 199, "unit": "month", "months": 1 },
-    { "key": "lace_year", "tier": "lace", "name": "VIP Lace รายปี", "emoji": "💎", "price": 2200, "unit": "year", "months": 12 },
-    { "key": "desire_month", "tier": "desire", "name": "VIP Desire รายเดือน", "emoji": "🔥", "price": 399, "unit": "month", "months": 1 },
-    { "key": "desire_year", "tier": "desire", "name": "VIP Desire รายปี", "emoji": "🔥", "price": 4500, "unit": "year", "months": 12 }
+    {
+      "key": "lace_month",
+      "tier": "lace",
+      "name": "VIP Lace รายเดือน",
+      "emoji": "💎",
+      "price": 199,
+      "unit": "month",
+      "months": 1
+    },
+    {
+      "key": "lace_year",
+      "tier": "lace",
+      "name": "VIP Lace รายปี",
+      "emoji": "💎",
+      "price": 2200,
+      "unit": "year",
+      "months": 12
+    },
+    {
+      "key": "desire_month",
+      "tier": "desire",
+      "name": "VIP Desire รายเดือน",
+      "emoji": "🔥",
+      "price": 399,
+      "unit": "month",
+      "months": 1
+    },
+    {
+      "key": "desire_year",
+      "tier": "desire",
+      "name": "VIP Desire รายปี",
+      "emoji": "🔥",
+      "price": 4500,
+      "unit": "year",
+      "months": 12
+    }
   ],
-
   "_comment_services": "pricing แต่ละ tier เป็นได้ 3 แบบ: ตัวเลข = ราคาคงที่ | {free_per_month, after_price} = ใช้ฟรี N ครั้ง/เดือน แล้วคิด after_price | {unlimited: true} = ฟรีไม่จำกัด. require_room=true เฉพาะบริการที่ต้องใช้ห้อง (เช่าห้อง Private/VVIP, ห้อง Private+ERP, ดูดวง)",
   "services": [
     {
@@ -94,7 +117,13 @@
       "emoji": "🏠",
       "duration_minutes": 60,
       "require_room": true,
-      "pricing": { "normal": 109, "lace": 109, "desire": 109, "obsession": 109 }
+      "pricing": {
+        "normal": 109,
+        "lace": 109,
+        "desire": 109,
+        "obsession": 109
+      },
+      "staff_share": 49
     },
     {
       "key": "room_vvip",
@@ -104,10 +133,20 @@
       "require_room": true,
       "pricing": {
         "normal": 169,
-        "lace": { "free_per_month": 1, "after_price": 169 },
-        "desire": { "free_per_month": 2, "after_price": 169 },
-        "obsession": { "free_per_month": 4, "after_price": 169 }
-      }
+        "lace": {
+          "free_per_month": 1,
+          "after_price": 169
+        },
+        "desire": {
+          "free_per_month": 2,
+          "after_price": 169
+        },
+        "obsession": {
+          "free_per_month": 4,
+          "after_price": 169
+        }
+      },
+      "staff_share": 79
     },
     {
       "key": "room_erp",
@@ -115,7 +154,13 @@
       "emoji": "💑",
       "duration_minutes": 60,
       "require_room": true,
-      "pricing": { "normal": 199, "lace": 129, "desire": 99, "obsession": 99 }
+      "pricing": {
+        "normal": 199,
+        "lace": 129,
+        "desire": 99,
+        "obsession": 99
+      },
+      "staff_share": 99
     },
     {
       "key": "erp",
@@ -123,7 +168,13 @@
       "emoji": "🔥",
       "duration_minutes": 60,
       "require_room": false,
-      "pricing": { "normal": 99, "lace": 99, "desire": 99, "obsession": 99 }
+      "pricing": {
+        "normal": 99,
+        "lace": 99,
+        "desire": 99,
+        "obsession": 99
+      },
+      "staff_share": 49
     },
     {
       "key": "consult",
@@ -135,8 +186,12 @@
         "normal": 99,
         "lace": 69,
         "desire": 69,
-        "obsession": { "free_per_month": 1, "after_price": 69 }
-      }
+        "obsession": {
+          "free_per_month": 1,
+          "after_price": 69
+        }
+      },
+      "staff_share": 49
     },
     {
       "key": "photo",
@@ -146,10 +201,19 @@
       "require_room": false,
       "pricing": {
         "normal": 79,
-        "lace": { "free_per_month": 1, "after_price": 79 },
-        "desire": { "free_per_month": 1, "after_price": 79 },
-        "obsession": { "unlimited": true }
-      }
+        "lace": {
+          "free_per_month": 1,
+          "after_price": 79
+        },
+        "desire": {
+          "free_per_month": 1,
+          "after_price": 79
+        },
+        "obsession": {
+          "unlimited": true
+        }
+      },
+      "staff_share": 39
     },
     {
       "key": "short_date",
@@ -159,10 +223,20 @@
       "require_room": false,
       "pricing": {
         "normal": 99,
-        "lace": { "free_per_month": 1, "after_price": 99 },
-        "desire": { "free_per_month": 2, "after_price": 99 },
-        "obsession": { "free_per_month": 4, "after_price": 99 }
-      }
+        "lace": {
+          "free_per_month": 1,
+          "after_price": 99
+        },
+        "desire": {
+          "free_per_month": 2,
+          "after_price": 99
+        },
+        "obsession": {
+          "free_per_month": 4,
+          "after_price": 99
+        }
+      },
+      "staff_share": 49
     },
     {
       "key": "extend_host",
@@ -171,7 +245,13 @@
       "duration_minutes": 60,
       "require_room": false,
       "extend_only": true,
-      "pricing": { "normal": 99, "lace": 99, "desire": 99, "obsession": 99 }
+      "pricing": {
+        "normal": 99,
+        "lace": 99,
+        "desire": 99,
+        "obsession": 99
+      },
+      "staff_share": 49
     },
     {
       "key": "drink_shot",
@@ -179,7 +259,13 @@
       "emoji": "🥃",
       "duration_minutes": 10,
       "require_room": false,
-      "pricing": { "normal": 50, "lace": 50, "desire": 50, "obsession": 50 }
+      "pricing": {
+        "normal": 50,
+        "lace": 50,
+        "desire": 50,
+        "obsession": 50
+      },
+      "staff_share": 50
     },
     {
       "key": "tarot",
@@ -187,57 +273,97 @@
       "emoji": "🔮",
       "duration_minutes": 30,
       "require_room": true,
-      "pricing": { "normal": 199, "lace": 199, "desire": 199, "obsession": 199 }
+      "pricing": {
+        "normal": 199,
+        "lace": 199,
+        "desire": 199,
+        "obsession": 199
+      },
+      "staff_share": 149
+    },
+    {
+      "key": "special_event",
+      "name": "Special Event",
+      "emoji": "🎉",
+      "duration_minutes": 60,
+      "require_room": false,
+      "staff_share": 59,
+      "pricing": {
+        "normal": 59,
+        "lace": 59,
+        "desire": 59,
+        "obsession": 59
+      }
     }
   ],
-
   "rooms": [
-    { "key": "divine_mirror", "name": "The divine mirror" },
-    { "key": "heaven_lounge", "name": "Heaven lounge" },
-    { "key": "velvet_cage", "name": "Velvet cage" },
-    { "key": "the_abyss", "name": "The abyss" },
-    { "key": "golden_pantheon", "name": "The Golden Pantheon" },
-    { "key": "oracle_whisper", "name": "The oracle whisper" },
-    { "key": "chamber_sin", "name": "Chamber sin" }
+    {
+      "key": "divine_mirror",
+      "name": "The divine mirror"
+    },
+    {
+      "key": "heaven_lounge",
+      "name": "Heaven lounge"
+    },
+    {
+      "key": "velvet_cage",
+      "name": "Velvet cage"
+    },
+    {
+      "key": "the_abyss",
+      "name": "The abyss"
+    },
+    {
+      "key": "golden_pantheon",
+      "name": "The Golden Pantheon"
+    },
+    {
+      "key": "oracle_whisper",
+      "name": "The oracle whisper"
+    },
+    {
+      "key": "chamber_sin",
+      "name": "Chamber sin"
+    }
   ],
-
   "discount_codes": {
-    "WELCOME10": { "type": "percent", "value": 10, "note": "ลูกค้าใหม่ ลด 10%" },
-    "OLP50": { "type": "amount", "value": 50, "note": "ลด 50 บาท" }
+    "WELCOME10": {
+      "type": "percent",
+      "value": 10,
+      "note": "ลูกค้าใหม่ ลด 10%"
+    },
+    "OLP50": {
+      "type": "amount",
+      "value": 50,
+      "note": "ลด 50 บาท"
+    }
   },
-
   "revenue_share": {
     "default_staff_percent": 60,
     "staff_percent": {
       "123456789012345678": 70
     }
   },
-
   "google_sheets": {
     "enabled": false,
     "spreadsheet_id": "",
     "credentials_file": "credentials.json"
   },
-
   "bill_timeout": {
     "slip_review_minutes": 10
   },
-
   "notify": {
     "loop_seconds": 35,
     "before_start_minutes": 5,
     "before_end_minutes": 5
   },
-
   "ticket": {
     "timeout_minutes": 10
   },
-
   "review": {
     "window_hours": 24,
     "embed_color": "#FF6FA5"
   },
-
   "cutoff": {
     "weekday": 5,
     "hour": 8,

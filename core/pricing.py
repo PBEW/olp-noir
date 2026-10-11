@@ -17,6 +17,8 @@ class Quote:
     tier: str | None
     quota_services: list[str] = field(default_factory=list)  # บริการที่ใช้สิทธิ์ฟรีในรอบนี้
     lines: list[tuple[str, float]] = field(default_factory=list)
+    fixed_staff: float = 0.0  # ส่วนพนักงานแบบบาทตายตัว (บริการที่ตั้ง staff_share)
+    percent_base: float = 0.0  # ยอดของบริการที่ไม่ได้ตั้ง staff_share → คิดตาม % ส่วนแบ่ง
 
     @property
     def breakdown(self) -> str:
@@ -44,6 +46,8 @@ async def quote_services(
     duration = 0
     lines: list[tuple[str, float]] = []
     quota_services: list[str] = []
+    fixed_staff = 0.0
+    percent_base = 0.0
 
     for key in service_keys:
         svc = cfg.service(key)
@@ -71,6 +75,11 @@ async def quote_services(
             lines.append((svc["name"], price))
 
         total += price
+        if svc.get("staff_share") is not None:
+            # ส่วนพนักงานตายตัวต่อครั้ง (ใช้สิทธิ์ฟรี VIP ร้านออกให้ พนักงานยังได้เต็ม)
+            fixed_staff += float(svc["staff_share"])
+        else:
+            percent_base += price
 
     return Quote(
         services=list(service_keys),
@@ -79,6 +88,8 @@ async def quote_services(
         tier=tier,
         quota_services=quota_services,
         lines=lines,
+        fixed_staff=fixed_staff,
+        percent_base=percent_base,
     )
 
 
@@ -95,11 +106,21 @@ async def release_quota_for_job(db: Database, customer_id: int, quota_services: 
 
 
 def split_revenue(cfg: Config, staff_id: int, total_price: float) -> tuple[float, float]:
-    """คืนค่า (ส่วนแบ่งพนักงาน, รายได้เข้าร้าน)"""
+    """คืนค่า (ส่วนแบ่งพนักงาน, รายได้เข้าร้าน) แบบคิดเป็น % ทั้งยอด"""
     percent = cfg.staff_percent(staff_id)
     staff_share = round(total_price * percent / 100.0, 2)
     shop_share = round(total_price - staff_share, 2)
     return staff_share, shop_share
+
+
+def split_quote(cfg: Config, staff_id: int, quote: Quote) -> tuple[float, float]:
+    """คืนค่า (ส่วนแบ่งพนักงาน, รายได้เข้าร้าน) ของบิล
+
+    บริการที่ตั้ง staff_share = พนักงานได้เป็นบาทตามตารางร้าน · ที่เหลือคิดตาม % ส่วนแบ่ง (revenue_share)
+    """
+    percent = cfg.staff_percent(staff_id)
+    staff_share = round(quote.fixed_staff + quote.percent_base * percent / 100.0, 2)
+    return staff_share, round(quote.total_price - staff_share, 2)
 
 
 def apply_discount(cfg: Config, code: str | None, price: float) -> tuple[float, float, str | None]:

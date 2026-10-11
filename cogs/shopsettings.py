@@ -296,7 +296,16 @@ def _service_fields(svc: dict | None) -> list[dict]:
     return [
         {"name": "name", "label": "ชื่อบริการ", "default": svc.get("name", ""), "max_length": 80},
         {"name": "minutes", "label": "ระยะเวลา (นาที)", "default": svc.get("duration_minutes", 60), "max_length": 4},
-        {"name": "normal", "label": "ราคาปกติ (บาท)", "default": format_price(pricing.get("normal", "")) if svc else "", "max_length": 8},
+        {
+            "name": "normal",
+            "label": "ราคาปกติ / ส่วนพนักงาน (บาท)",
+            "default": (
+                format_price(pricing.get("normal", ""))
+                + (f" / {_num(svc['staff_share'])}" if svc.get("staff_share") is not None else "")
+            ) if svc else "",
+            "placeholder": "เช่น 109 / 49  (ไม่ใส่ส่วนพนักงาน = คิดตาม % ส่วนแบ่ง)",
+            "max_length": 20,
+        },
         {
             "name": "vip",
             "label": "ราคา VIP: Lace / Desire / Obsession",
@@ -315,7 +324,9 @@ def _service_fields(svc: dict | None) -> list[dict]:
 
 
 def _apply_service(svc: dict, v: dict) -> None:
-    normal = _parse_number(v["normal"], "ราคาปกติ")
+    price_text, _, share_text = v["normal"].partition("/")
+    normal = _parse_number(price_text, "ราคาปกติ")
+    share = _parse_number(share_text, "ส่วนพนักงาน") if share_text.strip() else None
     minutes = int(_parse_number(v["minutes"], "ระยะเวลา", minimum=1, maximum=1440))
     parts = [p for p in v["vip"].split("/")] if v["vip"] else []
     if len(parts) not in (0, 3):
@@ -327,6 +338,10 @@ def _apply_service(svc: dict, v: dict) -> None:
     svc["duration_minutes"] = minutes
     svc["require_room"] = v["room"].strip().lower() in ("ใช่", "yes", "y", "ต้อง", "true")
     svc["pricing"] = pricing
+    if share is None:
+        svc.pop("staff_share", None)
+    else:
+        svc["staff_share"] = _num(share)
 
 
 class ServicesView(Section):
@@ -349,6 +364,7 @@ class ServicesView(Section):
             p = s.get("pricing", {})
             vip = " / ".join(format_price(p.get(t, p.get("normal", 0))) for t in TIERS)
             room = " · 🚪ต้องใช้ห้อง" if s.get("require_room") else ""
+            room += f" · 💃พนักงาน {_num(s['staff_share'])} บาท" if s.get("staff_share") is not None else " · 💃พนักงานตาม %"
             lines.append(f"{s.get('emoji', '•')} **{s['name']}** — {format_price(p.get('normal', 0))} บาท / {s.get('duration_minutes', 60)} นาที\n　VIP: {vip}{room}")
         embed = discord.Embed(title="🛎️ บริการ & ราคา", description="\n".join(lines)[:4000] or "-", color=COLOR_INFO)
         embed.set_footer(text="รูปแบบราคา VIP: 99 = ราคาคงที่ · ฟรี2 = ฟรี 2 ครั้ง/เดือนแล้วคิดราคาปกติ · ฟรี1+69 = ฟรี 1 ครั้งแล้วคิด 69 · ไม่จำกัด")

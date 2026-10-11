@@ -10,7 +10,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.embeds import COLOR_DANGER, COLOR_INFO, COLOR_MAIN, COLOR_OK, COLOR_WARN, job_embed, panel_embed
-from core.pricing import quote_services, reserve_quota_for_job, split_revenue
+from core.pricing import quote_services, reserve_quota_for_job, split_quote
 from core.utils import (
     TimeParseError,
     discord_ts,
@@ -731,7 +731,7 @@ class ReceptionCog(commands.Cog):
         quote = await quote_services(
             self.cfg, self.db, service_keys, customer_id=customer_id, tier=tier, now_local=now_local
         )
-        staff_share, shop_share = split_revenue(self.cfg, staff_id, quote.total_price)
+        staff_share, shop_share = split_quote(self.cfg, staff_id, quote)
         end = start + dt.timedelta(minutes=quote.duration_minutes)
         cycle = cycle_month_key(now_local)
 
@@ -788,7 +788,7 @@ class ReceptionCog(commands.Cog):
             tier=tier,
             now_local=now_local,
         )
-        staff_share, shop_share = split_revenue(self.cfg, parent["staff_id"], quote.total_price)
+        staff_share, shop_share = split_quote(self.cfg, parent["staff_id"], quote)
         cycle = cycle_month_key(now_local)
 
         old_end = from_iso(parent["end_time"])
