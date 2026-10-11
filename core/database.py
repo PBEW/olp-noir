@@ -199,6 +199,10 @@ class Database:
         """เพิ่มคอลัมน์ใหม่ให้ฐานข้อมูลเก่า (ไม่ลบข้อมูลเดิม)"""
         assert self.conn is not None
         wanted = {
+            "jobs": {
+                "staff_shares": "TEXT",                       # JSON {staff_id: บาท} บิลที่มีพนักงานหลายคน
+                "group_id": "INTEGER",                        # บิลที่เปิดพร้อมกันเป็นกลุ่ม (เลขบิลแรก)
+            },
             "vip_orders": {
                 "seller_id": "INTEGER",                       # พนักงานที่แนะนำ (ได้ค่าคอม)
                 "commission": "REAL NOT NULL DEFAULT 0",      # ค่าคอมของพนักงาน

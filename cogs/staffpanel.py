@@ -8,6 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.cycle import cycle_start_local
+from core.pricing import job_shares
 from core.embeds import COLOR_MAIN, COLOR_OK, STATUS_LABEL, panel_embed
 from core.utils import discord_ts, fmt_datetime, from_iso, is_admin, money, now_utc, purge_old_panels, to_iso
 
@@ -68,13 +69,14 @@ class StaffPanelCog(commands.Cog):
             return
         now_local = dt.datetime.now(self.cfg.tz)
         start = cycle_start_local(now_local, self.cfg)
+        me = interaction.user.id
         jobs = [
             j
             for j in await self.db.jobs_paid_between(to_iso(start), to_iso(now_local))
-            if j["staff_id"] == interaction.user.id
+            if me in job_shares(j)
         ]
         gross = sum(j["total_price"] for j in jobs)
-        share = sum(j["staff_share"] for j in jobs)
+        share = sum(job_shares(j)[me] for j in jobs)
 
         embed = discord.Embed(title="💰 รายได้ของคุณ (รอบปัจจุบัน)", color=COLOR_OK)
         embed.add_field(name="ตั้งแต่", value=fmt_datetime(start, self.cfg.tz), inline=True)
@@ -95,7 +97,7 @@ class StaffPanelCog(commands.Cog):
         embed.add_field(name="รวมทั้งหมด", value=f"**{money(share + donated + commission)}**", inline=False)
         if jobs:
             lines = [
-                f"`#{j['id']}` {self.cfg.service_names(j['services'])} · แบ่ง {money(j['staff_share'])}"
+                f"`#{j['id']}` {self.cfg.service_names(j['services'])} · แบ่ง {money(job_shares(j)[me])}"
                 for j in jobs[-10:]
             ]
             embed.add_field(name="บิลล่าสุด (สูงสุด 10 ใบ)", value="\n".join(lines)[:1024], inline=False)
@@ -109,7 +111,7 @@ class StaffPanelCog(commands.Cog):
         jobs = [
             j
             for j in await self.db.active_jobs()
-            if j["staff_id"] == interaction.user.id and from_iso(j["end_time"]) > now
+            if interaction.user.id in job_shares(j) and from_iso(j["end_time"]) > now
         ]
         embed = discord.Embed(title="📋 งานของคุณที่ยังไม่จบ", color=COLOR_MAIN)
         if not jobs:
