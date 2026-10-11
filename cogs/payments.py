@@ -10,7 +10,7 @@ from discord.ext import commands
 
 from core.cycle import cycle_label
 from core.sheets import month_title
-from core.pricing import release_quota_for_job
+from core.pricing import job_shares, job_staff_ids, job_staff_mentions, release_quota_for_job
 from core.embeds import (
     COLOR_DANGER,
     COLOR_GOLD,
@@ -146,7 +146,7 @@ class PaymentsCog(commands.Cog):
             title="💳 สรุปยอดชำระเงิน",
             description=(
                 f"บิล `#{job['id']}` · {self.cfg.service_names(job['services'])}\n"
-                f"พนักงาน: <@{job['staff_id']}>"
+                f"พนักงาน: {job_staff_mentions(job)}"
             ),
             amount=job["total_price"],
         )
@@ -342,18 +342,19 @@ class PaymentsCog(commands.Cog):
             job["customer_id"],
             embed=job_embed(self.cfg, job, title="✅ ชำระเงินสำเร็จ", color=COLOR_OK),
         )
-        await send_dm(
-            self.bot,
-            job["staff_id"],
-            embed=discord.Embed(
-                title="💰 ลูกค้าชำระเงินแล้ว",
-                description=(
-                    f"บิล `#{job_id}` ยอด {money(job['total_price'])}\n"
-                    f"ส่วนแบ่งของคุณ: **{money(job['staff_share'])}**"
+        for sid, share in job_shares(job).items():
+            await send_dm(
+                self.bot,
+                sid,
+                embed=discord.Embed(
+                    title="💰 ลูกค้าชำระเงินแล้ว",
+                    description=(
+                        f"บิล `#{job_id}` ยอด {money(job['total_price'])}\n"
+                        f"ส่วนแบ่งของคุณ: **{money(share)}**"
+                    ),
+                    color=COLOR_OK,
                 ),
-                color=COLOR_OK,
-            ),
-        )
+            )
 
         await self.log_job_to_sheet(job)
         return True, f"ยืนยันสลิปแล้ว โดย {admin.mention} — บิล `#{job_id}` สถานะ **PAID**"
@@ -393,7 +394,8 @@ class PaymentsCog(commands.Cog):
         if reason:
             note.add_field(name="เหตุผล", value=reason, inline=False)
         await send_dm(self.bot, job["customer_id"], embed=note)
-        await send_dm(self.bot, job["staff_id"], embed=note)
+        for sid in job_staff_ids(job):
+            await send_dm(self.bot, sid, embed=note)
 
         sheet_note = await self.remove_job_from_sheet(job)
         reason_suffix = f"\nเหตุผล: {reason}" if reason else ""
@@ -406,6 +408,10 @@ class PaymentsCog(commands.Cog):
         paid = from_iso(job.get("paid_at"))
         prefer = month_title(paid.astimezone(self.cfg.tz)) if paid else None
         removed = await self.bot.sheets.delete_rows(str(job["id"]), prefer)
+        for n in range(2, len(job_shares(job)) + 1):
+            extra = await self.bot.sheets.delete_rows(f"{job['id']}-{n}", prefer)
+            if removed is not None:
+                removed = None if extra is None else removed + extra
         if removed is None:
             return f"⚠️ ลบแถวบิล `#{job['id']}` ใน Google Sheets ไม่สำเร็จ ลบในชีตเองด้วยนะคะ ไม่งั้นยอดจะไม่ตรง"
         await self.db.update_job(job["id"], sheet_logged=0)
@@ -449,6 +455,8 @@ class PaymentsCog(commands.Cog):
         guild = self.bot.get_guild(job["guild_id"])
         start, end = from_iso(job["start_time"]), from_iso(job["end_time"])
         title, label, _ = self._sheet_place(job.get("paid_at"))
+        shares = job_shares(job)
+        main_share = shares.get(job["staff_id"], job["staff_share"])
         row = [
             job["id"],
             label,
@@ -461,14 +469,29 @@ class PaymentsCog(commands.Cog):
             self.cfg.service_names(job["services"]),
             self.cfg.room_name(job.get("room")),
             job["total_price"],
-            job["staff_share"],
+            main_share,
             job["shop_share"],
             "ต่อเวลา" if job["job_type"] == "EXTEND" else "ปกติ",
             self.cfg.vip_tier_name(job.get("vip_tier")) if job.get("vip_tier") else "ลูกค้าทั่วไป",
-            job.get("note") or "",
+            " · ".join(filter(None, [
+                job.get("note") or "",
+                f"พนักงาน {len(shares)} คน" if len(shares) > 1 else "",
+                f"กลุ่มบิล #{job['group_id']}" if job.get("group_id") else "",
+            ])),
         ]
         # ลงแท็บเดือนที่บิลนี้ชำระ (ไม่ใช่เดือนปัจจุบันเสมอไป — กันบิลย้อนหลังไปลงผิดแท็บ)
-        if await self.bot.sheets.append_job_row(title, row):
+        ok = await self.bot.sheets.append_job_row(title, row)
+        # พนักงานร่วม: แถวละคน (เลขที่ 12-2, 12-3 …) ยอด In = 0 ร้าน = 0 ส่วนแบ่ง = ของคนนั้น → สรุปจ่ายรายคนในชีตถูกต้อง
+        for n, sid in enumerate([s for s in shares if s != job["staff_id"]], start=2):
+            extra = list(row)
+            extra[0] = f"{job['id']}-{n}"
+            extra[6] = await display_name(self.bot, guild, sid)
+            extra[7] = f"'{sid}"
+            extra[10], extra[11], extra[12] = 0, shares[sid], 0
+            extra[13] = "พนักงานร่วม"
+            extra[15] = f"ทำงานร่วมบิล #{job['id']}"
+            ok = await self.bot.sheets.append_job_row(title, extra) and ok
+        if ok:
             await self.db.update_job(job["id"], sheet_logged=1)
 
     async def log_vip_to_sheet(self, order: dict) -> bool:

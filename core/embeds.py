@@ -5,6 +5,7 @@ import discord
 
 from .config import Config
 from .utils import discord_ts, from_iso, fmt_datetime, money
+from .pricing import job_staff_ids
 
 COLOR_MAIN = 0x2B2D31
 COLOR_INFO = 0x5865F2
@@ -70,7 +71,12 @@ def job_embed(cfg: Config, job: dict, *, title: str, color: int = COLOR_MAIN) ->
         inline=True,
     )
     embed.add_field(name="ลูกค้า", value=f"<@{job['customer_id']}>", inline=True)
-    embed.add_field(name="พนักงาน", value=f"<@{job['staff_id']}>", inline=True)
+    staff_ids = job_staff_ids(job)
+    embed.add_field(
+        name="พนักงาน" if len(staff_ids) == 1 else f"พนักงาน ({len(staff_ids)} คน)",
+        value=", ".join(f"<@{sid}>" for sid in staff_ids),
+        inline=True,
+    )
     embed.add_field(name="ห้อง", value=cfg.room_name(job.get("room")), inline=True)
     embed.add_field(name="บริการ", value=cfg.service_names(job["services"]), inline=False)
     embed.add_field(

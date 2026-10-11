@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 from dataclasses import dataclass, field
 
 from .config import Config
@@ -139,3 +140,39 @@ def apply_discount(cfg: Config, code: str | None, price: float) -> tuple[float, 
 
     discount = min(discount, price)
     return round(price - discount, 2), discount, code.strip().upper()
+
+
+def split_quote_multi(cfg: Config, staff_ids: list[int], quote: Quote) -> tuple[dict[int, float], float]:
+    """ส่วนแบ่งเมื่อบิลมีพนักงานหลายคน → ({staff_id: บาท}, ส่วนร้าน)
+
+    revenue_share.multi_staff_mode:
+      "split" (ค่าเริ่มต้น) = เอาส่วนพนักงานของบิลมาหารเท่ากัน · ร้านได้เท่าเดิมไม่ว่ามากี่คน
+      "each"  = ทุกคนได้ส่วนพนักงานเต็มตามตาราง · ร้านจ่ายเพิ่มตามจำนวนคน
+    """
+    staff_ids = list(dict.fromkeys(staff_ids))
+    if cfg.get("revenue_share.multi_staff_mode", "split") == "each":
+        shares = {sid: split_quote(cfg, sid, quote)[0] for sid in staff_ids}
+    else:
+        total, _ = split_quote(cfg, staff_ids[0], quote)
+        each = round(total / len(staff_ids), 2)
+        shares = {sid: each for sid in staff_ids}
+        shares[staff_ids[0]] = round(total - each * (len(staff_ids) - 1), 2)  # เศษสตางค์ให้คนหลัก
+    return shares, round(quote.total_price - sum(shares.values()), 2)
+
+
+def job_shares(job: dict) -> dict[int, float]:
+    """ส่วนแบ่งรายคนของบิล (บิลเก่าที่มีพนักงานคนเดียวก็ใช้ได้)"""
+    raw = job.get("staff_shares")
+    if raw:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        if data:
+            return {int(k): float(v) for k, v in data.items()}
+    return {job["staff_id"]: float(job.get("staff_share") or 0)}
+
+
+def job_staff_ids(job: dict) -> list[int]:
+    return list(job_shares(job))
+
+
+def job_staff_mentions(job: dict) -> str:
+    return ", ".join(f"<@{sid}>" for sid in job_staff_ids(job))

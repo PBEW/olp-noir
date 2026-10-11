@@ -339,6 +339,8 @@
     }
   },
   "revenue_share": {
+    "_comment_multi_staff_mode": "บิลที่มีพนักงานหลายคน: split = หารส่วนพนักงานเท่ากัน (ร้านได้เท่าเดิม) | each = ทุกคนได้เต็ม",
+    "multi_staff_mode": "split",
     "default_staff_percent": 60,
     "staff_percent": {
       "123456789012345678": 70

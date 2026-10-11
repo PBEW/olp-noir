@@ -12,6 +12,7 @@ from discord.ext import commands, tasks
 from core.cycle import cycle_label, cycle_start_local, cycle_title, next_cutoff_local
 from core.sheets import month_title
 from core.embeds import COLOR_INFO, COLOR_OK, COLOR_WARN
+from core.pricing import job_shares, job_staff_ids, job_staff_mentions
 from core.utils import (
     discord_ts,
     display_name,
@@ -93,27 +94,28 @@ class SchedulerCog(commands.Cog):
 
     async def _notify_start(self, job: dict, start: dt.datetime) -> None:
         minutes = self.cfg.before_start_minutes
-        await send_dm(
-            self.bot,
-            job["staff_id"],
-            embed=discord.Embed(
-                title=f"⏰ อีก {minutes} นาทีจะถึงเวลางาน",
-                description=(
-                    f"บิล `#{job['id']}` · ลูกค้า <@{job['customer_id']}>\n"
-                    f"บริการ: {self.cfg.service_names(job['services'])}\n"
-                    f"ห้อง: {self.cfg.room_name(job.get('room'))}\n"
-                    f"เริ่ม {discord_ts(start)} เตรียมตัวได้แล้วค่ะ"
+        for sid in job_staff_ids(job):
+            await send_dm(
+                self.bot,
+                sid,
+                embed=discord.Embed(
+                    title=f"⏰ อีก {minutes} นาทีจะถึงเวลางาน",
+                    description=(
+                        f"บิล `#{job['id']}` · ลูกค้า <@{job['customer_id']}>\n"
+                        f"บริการ: {self.cfg.service_names(job['services'])}\n"
+                        f"ห้อง: {self.cfg.room_name(job.get('room'))}\n"
+                        f"เริ่ม {discord_ts(start)} เตรียมตัวได้แล้วค่ะ"
+                    ),
+                    color=COLOR_WARN,
                 ),
-                color=COLOR_WARN,
-            ),
-        )
+            )
         await send_dm(
             self.bot,
             job["customer_id"],
             embed=discord.Embed(
                 title=f"⏰ อีก {minutes} นาทีจะถึงเวลานัด",
                 description=(
-                    f"บิล `#{job['id']}` · พนักงาน <@{job['staff_id']}>\n"
+                    f"บิล `#{job['id']}` · พนักงาน {job_staff_mentions(job)}\n"
                     f"ห้อง: {self.cfg.room_name(job.get('room'))}\n"
                     f"เริ่ม {discord_ts(start)} เตรียมเข้าห้องได้แล้วค่ะ"
                 ),
@@ -131,7 +133,8 @@ class SchedulerCog(commands.Cog):
             ),
             color=COLOR_WARN,
         )
-        await send_dm(self.bot, job["staff_id"], embed=embed)
+        for sid in job_staff_ids(job):
+            await send_dm(self.bot, sid, embed=embed)
         await send_dm(self.bot, job["customer_id"], embed=embed)
 
     # ------------------------------------------------------------- Ticket
@@ -265,10 +268,11 @@ class SchedulerCog(commands.Cog):
 
         per_staff: dict[int, list[float]] = defaultdict(lambda: [0.0, 0.0, 0])
         for job in jobs:
-            row = per_staff[job["staff_id"]]
-            row[0] += job["total_price"]
-            row[1] += job["staff_share"]
-            row[2] += 1
+            for sid, share in job_shares(job).items():
+                row = per_staff[sid]
+                row[0] += job["total_price"]
+                row[1] += share
+                row[2] += 1
 
         embed = discord.Embed(
             title="📊 สรุปยอดรอบบิล",
@@ -294,7 +298,8 @@ class SchedulerCog(commands.Cog):
 
         payout: dict[int, float] = defaultdict(float)  # ยอดที่ต้องโอนพนักงาน = ส่วนแบ่งบิล + โดเนท + ค่าคอม VIP
         for job in jobs:
-            payout[job["staff_id"]] += job["staff_share"]
+            for sid, share in job_shares(job).items():
+                payout[sid] += share
 
         vips = await self.db.vip_sales_between(to_iso(start_local), to_iso(end_local))
         if vips:

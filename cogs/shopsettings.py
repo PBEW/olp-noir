@@ -289,6 +289,12 @@ class RoomsView(Section):
 
 
 # -------------------------------------------------------------- services
+MULTI_STAFF_MODES = {
+    "split": "**หารเท่ากัน** — ส่วนพนักงานของบิลหารตามจำนวนคน ร้านได้เท่าเดิม (แนะนำ)",
+    "each": "**ได้เต็มทุกคน** — ทุกคนได้ส่วนพนักงานเต็มตามตาราง ร้านจ่ายเพิ่มตามจำนวนคน",
+}
+
+
 def _service_fields(svc: dict | None) -> list[dict]:
     svc = svc or {}
     pricing = svc.get("pricing", {})
@@ -478,6 +484,11 @@ class ShareView(Section):
         embed = discord.Embed(title="💸 ส่วนแบ่งพนักงาน", color=COLOR_INFO)
         embed.add_field(name="ค่าเริ่มต้น (ทุกคน)", value=f"**{_num(share.get('default_staff_percent', 60))}%** ของยอดบิล", inline=False)
         embed.add_field(name="ตั้งรายคน", value="\n".join(lines)[:1024] or "-", inline=False)
+        embed.add_field(
+            name="👥 บิลที่มีพนักงานหลายคน",
+            value=MULTI_STAFF_MODES[share.get("multi_staff_mode", "split")],
+            inline=False,
+        )
         embed.set_footer(text="มีผลกับบิลที่เปิดใหม่หลังจากนี้ บิลเก่าไม่เปลี่ยน")
         return embed
 
@@ -514,6 +525,14 @@ class ShareView(Section):
         await interaction.response.send_modal(
             SimpleModal("ส่วนแบ่งรายคน", [{"name": "pct", "label": "% ที่ได้ (เว้นว่าง = ใช้ค่าเริ่มต้น)", "default": table.get(uid, ""), "required": False, "max_length": 5}], done)
         )
+
+
+    @discord.ui.button(label="สลับวิธีแบ่งหลายคน", emoji="👥", style=discord.ButtonStyle.secondary, row=1)
+    async def multi_mode(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        share = self._share()
+        share["multi_staff_mode"] = "each" if share.get("multi_staff_mode", "split") == "split" else "split"
+        await _save(interaction, f"บิลหลายพนักงาน → {MULTI_STAFF_MODES[share['multi_staff_mode']]}")
+        await self.refresh(interaction)
 
 
 # -------------------------------------------------------------- discount
