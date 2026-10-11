@@ -40,6 +40,11 @@
     "note": "โอนแล้วส่งภาพสลิปกลับมาที่ DM นี้ได้เลยค่ะ"
   },
 
+  "_comment_vip": "vip.commission_percent = % ค่าคอมที่พนักงานได้ เมื่อลูกค้าเลือกพนักงานคนนั้นตอนซื้อ VIP",
+  "vip": {
+    "commission_percent": 20
+  },
+
   "_comment_vip_tiers": "ลำดับชั้น VIP เรียงจากต่ำไปสูง ต้องใส่ role_id ให้ครบ ระดับ obsession ห้ามซื้อเอง (purchasable=false) ให้ได้จากแอดมินอนุมัติหรือสะสมครบ 12 เดือนเท่านั้น",
   "vip_tiers": [
     {

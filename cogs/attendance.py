@@ -357,6 +357,16 @@ class AttendanceCog(commands.Cog):
     async def my_hours_command(self, interaction: discord.Interaction) -> None:
         await self.send_my_hours(interaction)
 
+    async def working_today(self) -> list[dict]:
+        """การเข้างานของวันทำงานนี้ (ตั้งแต่เวลาตัดออกงานครั้งล่าสุด) — 1 แถวต่อคน เรียงตามเวลาเข้า"""
+        rows = await self.db.fetchall(
+            "SELECT * FROM attendance WHERE clock_in >= ? ORDER BY clock_in", (to_iso(self._last_cutoff()),)
+        )
+        seen: dict[int, dict] = {}
+        for r in rows:
+            seen.setdefault(r["user_id"], r)
+        return list(seen.values())
+
     async def on_duty_embed(self) -> discord.Embed:
         """คนที่กดเข้างานในวันทำงานนี้ (ตั้งแต่เวลาตัดออกงานครั้งล่าสุด)"""
         rows = await self.db.fetchall(

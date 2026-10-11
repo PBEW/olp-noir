@@ -14,6 +14,7 @@ from core.pricing import quote_services, reserve_quota_for_job, split_revenue
 from core.utils import (
     TimeParseError,
     discord_ts,
+    fmt_time,
     from_iso,
     NOT_RECEPTION,
     is_reception,
@@ -135,7 +136,7 @@ class BillDetailModal(discord.ui.Modal, title="รายละเอียดบ
 class OpenBillWizard(discord.ui.View):
     """แผงเลือกข้อมูลเปิดบิลแบบขั้นตอนเดียว (ephemeral)"""
 
-    def __init__(self, cog: "ReceptionCog", opener: discord.Member) -> None:
+    def __init__(self, cog: "ReceptionCog", opener: discord.Member, working: list[tuple[discord.Member, str]]) -> None:
         super().__init__(timeout=600)
         self.cog = cog
         self.cfg = cog.cfg
@@ -152,22 +153,19 @@ class OpenBillWizard(discord.ui.View):
         self.add_item(self.customer_select)
 
         # ถ้าตั้ง roles.staff ไว้ ให้แสดงรายชื่อพนักงานเป็นเมนู (ไม่ต้องพิมพ์ค้นหา ชื่อฟอนต์พิเศษก็เลือกได้)
-        staff = self._staff_members(opener)
-        if 0 < len(staff) <= 25:
-            self.staff_select = discord.ui.Select(
-                placeholder="💃 เลือกพนักงาน / โฮสต์",
-                min_values=1,
-                max_values=1,
-                row=1,
-                options=[
-                    discord.SelectOption(label=m.display_name[:100], value=str(m.id), description=m.name[:100])
-                    for m in staff
-                ],
-            )
-        else:
-            self.staff_select = discord.ui.UserSelect(
-                placeholder="💃 เลือกพนักงาน / โฮสต์ (พิมพ์ชื่อเพื่อค้นหา)", min_values=1, max_values=1, row=1
-            )
+        # เลือกได้เฉพาะพนักงานที่กดเข้างานวันนี้แล้ว
+        self.staff_select = discord.ui.Select(
+            placeholder=f"💃 เลือกพนักงาน (เข้างานวันนี้ {len(working)} คน)",
+            min_values=1,
+            max_values=1,
+            row=1,
+            options=[
+                discord.SelectOption(
+                    label=m.display_name[:100], value=str(m.id), emoji="🟢", description=f"เข้างาน {since} น."
+                )
+                for m, since in working[:25]
+            ],
+        )
         self.staff_select.callback = self._on_staff
         self.add_item(self.staff_select)
 
@@ -217,20 +215,6 @@ class OpenBillWizard(discord.ui.View):
     async def _on_customer(self, interaction: discord.Interaction) -> None:
         self.customer_id = self.customer_select.values[0].id
         await self._refresh(interaction)
-
-    def _staff_members(self, opener: discord.Member) -> list[discord.Member]:
-        guild = getattr(opener, "guild", None)
-        role_ids = set(self.cfg.staff_role_ids)
-        if guild is None or not role_ids:
-            return []
-        members = {
-            m.id: m
-            for role_id in role_ids
-            if (role := guild.get_role(role_id)) is not None
-            for m in role.members
-            if not m.bot
-        }
-        return sorted(members.values(), key=lambda m: m.display_name.lower())
 
     async def _on_staff(self, interaction: discord.Interaction) -> None:
         value = self.staff_select.values[0]
@@ -658,7 +642,20 @@ class ReceptionCog(commands.Cog):
         if not self._admin_guard(interaction):
             await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
             return
-        wizard = OpenBillWizard(self, interaction.user)
+        attendance = self.bot.get_cog("AttendanceCog")
+        working = []
+        for r in await attendance.working_today():
+            member = interaction.guild.get_member(r["user_id"]) if interaction.guild else None
+            if member is not None:
+                working.append((member, fmt_time(from_iso(r["clock_in"]), self.cfg.tz)))
+        if not working:
+            await interaction.response.send_message(
+                "ยังไม่มีพนักงานกดเข้างานวันนี้ค่ะ ให้พนักงานกด 🟢 เข้างานทำงานวันนี้ ใน `/panel_staff` ก่อน "
+                "แล้วค่อยเปิดบิลนะคะ",
+                ephemeral=True,
+            )
+            return
+        wizard = OpenBillWizard(self, interaction.user, working)
         await interaction.response.send_message(
             embed=await wizard.summary_embed(), view=wizard, ephemeral=True
         )

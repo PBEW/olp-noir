@@ -402,7 +402,25 @@ class VipView(Section):
 
     def embed(self) -> discord.Embed:
         lines = [f"{p.get('emoji', '')} **{p['name']}** — {money(p['price'])}" for p in self.cfg.vip_packages]
-        return discord.Embed(title="💎 แพ็กเกจ VIP", description="\n".join(lines) or "-", color=COLOR_INFO)
+        embed = discord.Embed(title="💎 แพ็กเกจ VIP", description="\n".join(lines) or "-", color=COLOR_INFO)
+        embed.add_field(
+            name="💃 ค่าคอมพนักงานที่แนะนำ",
+            value=f"**{_num(self.cfg.vip_commission_percent)}%** ของยอดที่ลูกค้าจ่าย (ลูกค้าเลือกพนักงานตอนซื้อ)",
+            inline=False,
+        )
+        return embed
+
+    @discord.ui.button(label="แก้ % ค่าคอม", emoji="💃", style=discord.ButtonStyle.secondary, row=1)
+    async def commission(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        async def done(inter, v):
+            pct = _num(_parse_number(v["pct"], "เปอร์เซ็นต์", maximum=100))
+            self.cfg.data.setdefault("vip", {})["commission_percent"] = pct
+            await _save(inter, f"ค่าคอมขาย VIP → **{pct}%**")
+            await self.refresh(inter)
+
+        await interaction.response.send_modal(
+            SimpleModal("ค่าคอมขาย VIP", [{"name": "pct", "label": "% ที่พนักงานได้", "default": _num(self.cfg.vip_commission_percent), "max_length": 5}], done)
+        )
 
     @discord.ui.button(label="แก้ราคา", emoji="✏️", style=discord.ButtonStyle.primary, row=1)
     async def edit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:

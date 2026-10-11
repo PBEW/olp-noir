@@ -1,7 +1,8 @@
 """บันทึกบัญชีลง Google Sheets (ทำงานแบบ optional — ปิดได้ใน config)
 
-ชีตรอบบิล (Cycle_YYYY-MM-DD): ตาราง A:P + กล่องสรุปด้านขวา Q:S
-ชีต Attendance: บันทึกเข้างานรายวัน · ชีต Donations: โดเนท
+ชีตบัญชีรายเดือน (บัญชี_YYYY-MM): บิล + โดเนท + ขาย VIP รวมในตารางเดียว A:P (คอลัมน์ B = รอบตัดยอดรายสัปดาห์)
+  + กล่องสรุปด้านขวา Q:S (ยอดทั้งเดือน และยอดที่ต้องโอนพนักงานแยกตามรอบ)
+ชีต Attendance: บันทึกเข้างานรายวัน
 ทุกชีตจัดรูปแบบให้อ่านง่าย (หัวตารางสีดำ-ทอง, แยกสีคอลัมน์เงิน, ไฮไลต์บิลต่อเวลา, ปุ่มตัวกรอง)
 สั่งจัดรูปแบบใหม่ได้ด้วย /sheets_format
 """
@@ -18,39 +19,48 @@ log = logging.getLogger("olp.sheets")
 
 # ลำดับคอลัมน์ต้องตรงกับแถวที่ PaymentsCog.log_job_to_sheet เขียน (A..P)
 HEADERS = [
-    "เลขบิล",                   # A
-    "วันที่",                    # B
-    "เริ่ม",                     # C
-    "จบ",                       # D
+    "เลขที่",                   # A  (12 = บิล · D#3 = โดเนท · V#5 = ขาย VIP)
+    "รอบ",                      # B  (รอบตัดยอดรายสัปดาห์ เช่น 03/10–09/10)
+    "วันที่",                    # C
+    "เวลา",                     # D
     "ลูกค้า",                    # E
     "ID ลูกค้า",                 # F (ซ่อน)
-    "พนักงาน",                  # G
+    "พนักงาน / ผู้รับ",          # G
     "ID พนักงาน",               # H (ซ่อน)
-    "บริการ",                    # I
+    "รายการ",                   # I
     "ห้อง",                      # J
-    "💰 ยอดบิล (In)",            # K
+    "💰 ยอด (In)",              # K
     "💃 ส่วนแบ่งพนักงาน (Out)",   # L
     "🏠 รายได้ร้าน",              # M
-    "ประเภท",                   # N
+    "ประเภท",                   # N  (ปกติ / ต่อเวลา / โดเนท / VIP)
     "ระดับ VIP",                 # O
     "หมายเหตุ",                 # P
 ]
 
 # กล่องสรุปด้านขวา (คอลัมน์ Q:S)
 SUMMARY_BLOCK = [
-    ["📊 สรุปรอบนี้", "", ""],
-    ["💰 ยอดบิลรวม (In)", "=SUM(K2:K)", ""],
+    ["📊 สรุปเดือนนี้", "", ""],
+    ["💰 ยอดรวม (In)", "=SUM(K2:K)", ""],
     ["💃 จ่ายพนักงาน (Out)", "=SUM(L2:L)", ""],
     ["🏠 รายได้เข้าร้าน", "=SUM(M2:M)", ""],
-    ["🧾 จำนวนบิล", "=COUNTA(A2:A)", ""],
-    ["", "", ""],
-    ["พนักงาน", "ยอดบิล", "ส่วนแบ่ง (ต้องโอน)"],
+    ["🧾 จำนวนรายการ", "=COUNTA(A2:A)", ""],
+    ["💸 ยอดที่ต้องโอนพนักงาน (แยกตามรอบ)", "", ""],
+    ["รอบ", "พนักงาน", "ยอดโอน"],
     [
-        "=IFERROR(UNIQUE(FILTER(G2:G,G2:G<>\"\")),\"\")",
-        "=ARRAYFORMULA(IF(Q8:Q=\"\",,SUMIF(G:G,Q8:Q,K:K)))",
-        "=ARRAYFORMULA(IF(Q8:Q=\"\",,SUMIF(G:G,Q8:Q,L:L)))",
+        "=IFERROR(QUERY(A2:P,\"select B, G, sum(L) where L > 0 group by B, G order by B, G label sum(L) ''\",0),\"\")",
+        "",
+        "",
     ],
 ]
+
+MONTH_PREFIX = "บัญชี_"
+LEGACY_PREFIX = "Cycle_"
+
+
+def month_title(local: dt.datetime) -> str:
+    """ชื่อแท็บบัญชีของเดือนนั้น"""
+    return f"{MONTH_PREFIX}{local:%Y-%m}"
+
 
 ATTENDANCE_SHEET = "Attendance"
 ATTENDANCE_HEADERS = [
@@ -62,21 +72,6 @@ ATTENDANCE_HEADERS = [
     "ID พนักงาน",               # F (ซ่อน)
     "ชั่วโมง",                   # G
     "หมายเหตุ",                 # H
-]
-
-DONATION_SHEET = "Donations"
-DONATION_HEADERS = [
-    "เลขที่",            # A
-    "วันเวลา",           # B
-    "ผู้โดเนท",          # C
-    "ID ผู้โดเนท",       # D (ซ่อน)
-    "ผู้รับ",            # E
-    "ID ผู้รับ",         # F (ซ่อน)
-    "🎁 ยอด",           # G
-    "💃 ส่วนของโฮสต์",   # H
-    "🏠 เข้าร้าน",       # I
-    "หมายเหตุ",         # J
-    "ข้อความ",          # K
 ]
 
 # ---------------------------------------------------------------- สี (ธีม OLP-Noir: ดำ-ทอง)
@@ -228,16 +223,20 @@ def cycle_style_requests(sheet_id: int) -> list[dict]:
         _cell(sheet_id, 4, 5, R, R + 1, {"numberFormat": {"type": "NUMBER", "pattern": "#,##0 \"บิล\""}}),
         _box(sheet_id, 0, 5, Q, S + 1),
         _cell(sheet_id, 6, 7, Q, S + 1, _header_fmt(NOIR_SOFT)),
-        _cell(sheet_id, 7, None, Q, Q + 1, {"textFormat": {"bold": True}}),
-        _cell(sheet_id, 7, None, R, R + 1, {"numberFormat": {"type": "NUMBER", "pattern": MONEY}}),
+        {"unmergeCells": {"range": _range(sheet_id, 5, 6, Q, S + 1)}},
+        {"mergeCells": {"range": _range(sheet_id, 5, 6, Q, S + 1), "mergeType": "MERGE_ALL"}},
+        _cell(sheet_id, 5, 6, Q, S + 1, _header_fmt(ORANGE, size=11)),
+        _cell(sheet_id, 7, None, Q, Q + 1, {"horizontalAlignment": "CENTER"}),
+        _cell(sheet_id, 7, None, R, R + 1, {"textFormat": {"bold": True}}),
         _cell(sheet_id, 7, None, S, S + 1, {**_money(ORANGE_LIGHT, bold=True)}),
-        # ไฮไลต์ทั้งแถว: บิลต่อเวลา = เหลือง · VIP = ทองอ่อน
+        # ไฮไลต์ทั้งแถว: ต่อเวลา = เหลือง · โดเนท = ชมพู · ขาย VIP = ทองอ่อน
         _row_rule(sheet_id, '=$N2="ต่อเวลา"', YELLOW_LIGHT, 0, 16),
-        _row_rule(sheet_id, '=AND($O2<>"",$O2<>"ลูกค้าทั่วไป")', GOLD_LIGHT, 1, 16),
+        _row_rule(sheet_id, '=$N2="โดเนท"', PINK_LIGHT, 1, 16),
+        _row_rule(sheet_id, '=$N2="VIP"', GOLD_LIGHT, 2, 16),
         # ปุ่มตัวกรอง/เรียงลำดับบนหัวตาราง
         _filter(sheet_id, 16),
     ]
-    widths = {0: 70, 1: 95, 2: 65, 3: 65, 4: 150, 6: 150, 8: 230, 9: 140, K: 120, L: 140, M: 120, N: 80, 14: 110, 15: 220, Q: 200, R: 140, S: 150}
+    widths = {0: 70, 1: 110, 2: 90, 3: 95, 4: 150, 6: 150, 8: 230, 9: 130, K: 120, L: 140, M: 120, N: 80, 14: 110, 15: 220, Q: 130, R: 170, S: 140}
     reqs += [_width(sheet_id, col, px) for col, px in widths.items()]
     reqs += [_hide(sheet_id, col) for col in (5, 7)]  # ID ลูกค้า, ID พนักงาน
     return reqs
@@ -262,28 +261,6 @@ def attendance_style_requests(sheet_id: int) -> list[dict]:
     widths = {0: 70, 1: 100, 2: 140, 3: 160, 4: 170, 6: 100, 7: 240}
     reqs += [_width(sheet_id, col, px) for col, px in widths.items()]
     reqs.append(_hide(sheet_id, 5))
-    return reqs
-
-
-def donation_style_requests(sheet_id: int) -> list[dict]:
-    reqs: list[dict] = [
-        _freeze(sheet_id),
-        _row_height(sheet_id, 0, 36),
-        _cell(sheet_id, 0, 1, 0, 11, _header_fmt(PINK)),
-        _cell(sheet_id, 0, 1, 7, 8, _header_fmt(ORANGE)),
-        _cell(sheet_id, 0, 1, 8, 9, _header_fmt(BLUE)),
-        _cell(sheet_id, 1, None, 0, 2, {"horizontalAlignment": "CENTER"}),
-        _cell(sheet_id, 1, None, 2, 3, {"textFormat": {"bold": True}}),
-        _cell(sheet_id, 1, None, 4, 5, {"textFormat": {"bold": True}}),
-        _cell(sheet_id, 1, None, 6, 7, _money(PINK_LIGHT, bold=True)),
-        _cell(sheet_id, 1, None, 7, 8, _money(ORANGE_LIGHT)),
-        _cell(sheet_id, 1, None, 8, 9, _money(BLUE_LIGHT)),
-        _cell(sheet_id, 1, None, 10, 11, {"wrapStrategy": "WRAP"}),
-        _filter(sheet_id, 11),
-    ]
-    widths = {0: 70, 1: 140, 2: 160, 4: 160, 6: 110, 7: 130, 8: 110, 9: 130, 10: 280}
-    reqs += [_width(sheet_id, col, px) for col, px in widths.items()]
-    reqs += [_hide(sheet_id, col) for col in (3, 5)]
     return reqs
 
 
@@ -366,12 +343,9 @@ class SheetsClient:
             ws.update(values=[HEADERS], range_name="A1")
             ws.update(values=SUMMARY_BLOCK, range_name="Q1", value_input_option="USER_ENTERED")
             requests = cycle_style_requests(ws.id)
-        elif kind == "attendance":
+        else:
             ws.update(values=[ATTENDANCE_HEADERS], range_name="A1")
             requests = attendance_style_requests(ws.id)
-        else:
-            ws.update(values=[DONATION_HEADERS], range_name="A1")
-            requests = donation_style_requests(ws.id)
         self._spreadsheet.batch_update({"requests": self._clear_old_styles(ws.id) + requests})
         self._styled.add(ws.title)
 
@@ -385,8 +359,8 @@ class SheetsClient:
             log.exception("จัดรูปแบบชีต %s ไม่สำเร็จ", ws.title)
             self._styled.add(ws.title)
 
-    def _cycle_ws(self, title: str):
-        ws, _ = self._worksheet(title, rows=500, cols=26)
+    def _month_ws(self, title: str):
+        ws, _ = self._worksheet(title, rows=1000, cols=26)
         self._ensure_styled(ws, "cycle")
         return ws
 
@@ -395,18 +369,13 @@ class SheetsClient:
         self._ensure_styled(ws, "attendance")
         return ws
 
-    def _donation_ws(self):
-        ws, _ = self._worksheet(DONATION_SHEET, rows=1000, cols=len(DONATION_HEADERS))
-        self._ensure_styled(ws, "donation")
-        return ws
-
     @staticmethod
     def _append_below(ws, row: list, last_col: str) -> None:
         """เขียนต่อจากแถวสุดท้ายของคอลัมน์ A — ไม่ใช้ append_row เพราะ Google จะนับกล่องสรุปด้านขวา
         เป็นส่วนของตารางแล้วแทรกแถวว่าง"""
         line = len(ws.col_values(1)) + 1
         if line > ws.row_count:
-            ws.add_rows(200)
+            ws.add_rows(500)
         ws.update(values=[row], range_name=f"A{line}:{last_col}{line}", value_input_option="USER_ENTERED")
 
     @staticmethod
@@ -433,36 +402,68 @@ class SheetsClient:
 
     # -------------------------------------------------------------- public
     async def append_job_row(self, sheet_title: str, row: list) -> bool:
+        """ลงรายการในแท็บบัญชีรายเดือน (บิล / โดเนท / ขาย VIP) — ใช้ upsert กันลงซ้ำตามเลขที่"""
         return await self._run(
-            "บันทึกบิลลง Google Sheets", lambda: self._append_below(self._cycle_ws(sheet_title), row, "P")
+            "บันทึกรายการลง Google Sheets", lambda: self._upsert(self._month_ws(sheet_title), row, "P")
         )
 
     async def append_attendance_row(self, row: list) -> bool:
         return await self._run("บันทึกเวลาเข้างานลง Google Sheets", lambda: self._upsert(self._attendance_ws(), row, "H"))
 
-    async def append_donation_row(self, row: list) -> bool:
-        return await self._run("บันทึกโดเนทลง Google Sheets", lambda: self._upsert(self._donation_ws(), row, "K"))
+    async def ensure_month_sheet(self, title: str) -> bool:
+        return await self._run(f"สร้างแท็บบัญชี ({title})", lambda: self._month_ws(title))
 
-    async def create_cycle_sheet(self, title: str) -> bool:
-        return await self._run(f"สร้างชีตรอบใหม่ ({title})", lambda: self._cycle_ws(title))
+    # ------------------------------------------------------ ลบแถวตามเลขที่
+    async def delete_rows(self, key: str, prefer_title: str | None = None) -> int | None:
+        """ลบแถวที่คอลัมน์ A = key ออกจากแท็บบัญชี (ใช้ตอนยกเลิกบิล)
+        คืนจำนวนแถวที่ลบ (0 = ไม่พบ) หรือ None ถ้าลบไม่สำเร็จ/ยังไม่ได้เชื่อม Sheets"""
+        if not self.ready:
+            return None
+        async with self._lock:
+            try:
+                return await asyncio.to_thread(self._delete_rows_sync, str(key), prefer_title)
+            except Exception:  # noqa: BLE001
+                log.exception("ลบแถว %s ใน Google Sheets ไม่สำเร็จ", key)
+                return None
 
-    async def restyle(self, cycle_title: str) -> list[str]:
-        """จัดรูปแบบชีตรอบปัจจุบัน + Attendance + Donations ใหม่ทั้งหมด — ข้อมูลเดิมไม่หาย"""
+    def _delete_rows_sync(self, key: str, prefer_title: str | None) -> int:
+        assert self._spreadsheet is not None
+        sheets = [
+            ws for ws in self._spreadsheet.worksheets()
+            if ws.title.startswith(MONTH_PREFIX) or ws.title.startswith(LEGACY_PREFIX)
+        ]
+        sheets.sort(key=lambda ws: ws.title, reverse=True)       # ใหม่ก่อน
+        sheets.sort(key=lambda ws: ws.title != prefer_title)     # แท็บที่ควรอยู่ขึ้นก่อนสุด
+        for ws in sheets:
+            ids = ws.col_values(1)
+            lines = [i for i, value in enumerate(ids) if i > 0 and str(value).strip() == key]
+            if not lines:
+                continue
+            # ลบเฉพาะคอลัมน์ A:P แล้วเลื่อนขึ้น ไม่แตะกล่องสรุปด้านขวา · ลบจากล่างขึ้นบน
+            self._spreadsheet.batch_update({"requests": [
+                {"deleteRange": {
+                    "range": {"sheetId": ws.id, "startRowIndex": i, "endRowIndex": i + 1,
+                              "startColumnIndex": 0, "endColumnIndex": len(HEADERS)},
+                    "shiftDimension": "ROWS",
+                }}
+                for i in sorted(lines, reverse=True)
+            ]})
+            return len(lines)
+        return 0
+
+    async def restyle(self, title: str) -> list[str]:
+        """จัดรูปแบบแท็บบัญชีเดือนนี้ + Attendance ใหม่ทั้งหมด — ข้อมูลเดิมไม่หาย"""
         if not self.ready:
             return []
         async with self._lock:
-            return await asyncio.to_thread(self._restyle_sync, cycle_title)
+            return await asyncio.to_thread(self._restyle_sync, title)
 
-    def _restyle_sync(self, cycle_title: str) -> list[str]:
+    def _restyle_sync(self, title: str) -> list[str]:
         done = []
-        for title, kind, rows, cols in (
-            (cycle_title, "cycle", 500, 26),
-            (ATTENDANCE_SHEET, "attendance", 1000, 8),
-            (DONATION_SHEET, "donation", 1000, len(DONATION_HEADERS)),
-        ):
-            ws, _ = self._worksheet(title, rows=rows, cols=cols)
+        for name, kind, rows, cols in ((title, "cycle", 1000, 26), (ATTENDANCE_SHEET, "attendance", 1000, 8)):
+            ws, _ = self._worksheet(name, rows=rows, cols=cols)
             self._style(ws, kind)
-            done.append(title)
+            done.append(name)
         return done
 
     async def spreadsheet_url(self) -> str | None:

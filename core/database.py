@@ -192,7 +192,25 @@ class Database:
         await self.conn.execute("PRAGMA journal_mode=WAL")
         await self.conn.execute("PRAGMA foreign_keys=ON")
         await self.conn.executescript(SCHEMA)
+        await self._migrate()
         await self.conn.commit()
+
+    async def _migrate(self) -> None:
+        """เพิ่มคอลัมน์ใหม่ให้ฐานข้อมูลเก่า (ไม่ลบข้อมูลเดิม)"""
+        assert self.conn is not None
+        wanted = {
+            "vip_orders": {
+                "seller_id": "INTEGER",                       # พนักงานที่แนะนำ (ได้ค่าคอม)
+                "commission": "REAL NOT NULL DEFAULT 0",      # ค่าคอมของพนักงาน
+                "sheet_logged": "INTEGER NOT NULL DEFAULT 0",
+            },
+        }
+        for table, columns in wanted.items():
+            async with self.conn.execute(f"PRAGMA table_info({table})") as cur:
+                have = {row[1] for row in await cur.fetchall()}
+            for name, decl in columns.items():
+                if name not in have:
+                    await self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
     async def close(self) -> None:
         if self.conn is not None:
@@ -323,6 +341,12 @@ class Database:
         holders = ", ".join("?" for _ in fields)
         return await self.execute(
             f"INSERT INTO vip_orders ({cols}) VALUES ({holders})", tuple(fields.values())
+        )
+
+    async def vip_sales_between(self, start_iso: str, end_iso: str) -> list[dict]:
+        return await self.fetchall(
+            "SELECT * FROM vip_orders WHERE status = 'ACTIVE' AND paid_at >= ? AND paid_at < ? ORDER BY paid_at",
+            (start_iso, end_iso),
         )
 
     async def get_vip_order(self, order_id: int) -> dict | None:

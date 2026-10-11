@@ -80,6 +80,11 @@ class Config:
         return [int(v) for v in values if str(v).strip().isdigit() and int(v)]
 
     @property
+    def vip_commission_percent(self) -> float:
+        """% ค่าคอมที่พนักงานได้เมื่อลูกค้าเลือกพนักงานคนนั้นตอนซื้อ VIP (vip.commission_percent)"""
+        return float(self.get("vip.commission_percent", 20))
+
+    @property
     def slip_review_minutes(self) -> int:
         return int(self.get("bill_timeout.slip_review_minutes", 10))
 
