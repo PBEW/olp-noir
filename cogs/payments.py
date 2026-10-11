@@ -8,7 +8,8 @@ import re
 import discord
 from discord.ext import commands
 
-from core.cycle import cycle_title
+from core.cycle import cycle_label
+from core.sheets import month_title
 from core.pricing import release_quota_for_job
 from core.embeds import (
     COLOR_DANGER,
@@ -394,10 +395,23 @@ class PaymentsCog(commands.Cog):
         await send_dm(self.bot, job["customer_id"], embed=note)
         await send_dm(self.bot, job["staff_id"], embed=note)
 
+        sheet_note = await self.remove_job_from_sheet(job)
         reason_suffix = f"\nเหตุผล: {reason}" if reason else ""
-        return True, (
-            f"ยกเลิกบิล `#{job_id}` แล้ว โดย {admin.mention} (ไม่บันทึกลง Google Sheets){reason_suffix}"
-        )
+        return True, f"ยกเลิกบิล `#{job_id}` แล้ว โดย {admin.mention}\n{sheet_note}{reason_suffix}"
+
+    async def remove_job_from_sheet(self, job: dict) -> str:
+        """ลบแถวของบิลที่ถูกยกเลิกออกจาก Google Sheets — คืนข้อความบอกผล"""
+        if not job.get("sheet_logged"):
+            return "(บิลนี้ยังไม่ได้ลง Google Sheets)"
+        paid = from_iso(job.get("paid_at"))
+        prefer = month_title(paid.astimezone(self.cfg.tz)) if paid else None
+        removed = await self.bot.sheets.delete_rows(str(job["id"]), prefer)
+        if removed is None:
+            return f"⚠️ ลบแถวบิล `#{job['id']}` ใน Google Sheets ไม่สำเร็จ ลบในชีตเองด้วยนะคะ ไม่งั้นยอดจะไม่ตรง"
+        await self.db.update_job(job["id"], sheet_logged=0)
+        if removed == 0:
+            return f"(ไม่เจอแถวบิล `#{job['id']}` ในชีต อาจถูกลบไปแล้ว)"
+        return f"🗑️ ลบแถวบิล `#{job['id']}` ออกจาก Google Sheets แล้ว"
 
     async def reject_job_by_staff(self, job: dict, staff: discord.abc.User, reason: str) -> None:
         """พนักงานปฏิเสธงานเพราะแอดมินคีย์บิลผิด — ยกเลิกบิลเงียบๆ (ลูกค้ายังไม่เคยรู้เรื่องบิลนี้)"""
@@ -422,24 +436,28 @@ class PaymentsCog(commands.Cog):
         )
 
     # ----------------------------------------------------- Google Sheets
+    def _sheet_place(self, paid_iso: str | None) -> tuple[str, str, dt.datetime]:
+        """(ชื่อแท็บเดือน, ชื่อรอบ, เวลาชำระแบบเวลาไทย) ของรายการที่ชำระตอนนั้น"""
+        paid = (from_iso(paid_iso) or now_utc()).astimezone(self.cfg.tz)
+        return month_title(paid), cycle_label(self.cfg, paid), paid
+
     async def log_job_to_sheet(self, job: dict) -> None:
-        if not self.bot.sheets.ready:
-            return
-        if job.get("sheet_logged"):
+        if not self.bot.sheets.ready or job.get("sheet_logged"):
             return
 
         tz = self.cfg.tz
         guild = self.bot.get_guild(job["guild_id"])
         start, end = from_iso(job["start_time"]), from_iso(job["end_time"])
+        title, label, _ = self._sheet_place(job.get("paid_at"))
         row = [
             job["id"],
+            label,
             fmt_date(start, tz),
-            fmt_time(start, tz),
-            fmt_time(end, tz),
+            f"{fmt_time(start, tz)}–{fmt_time(end, tz)}",
             await display_name(self.bot, guild, job["customer_id"]),
-            str(job["customer_id"]),
+            f"'{job['customer_id']}",
             await display_name(self.bot, guild, job["staff_id"]),
-            str(job["staff_id"]),
+            f"'{job['staff_id']}",
             self.cfg.service_names(job["services"]),
             self.cfg.room_name(job.get("room")),
             job["total_price"],
@@ -449,15 +467,50 @@ class PaymentsCog(commands.Cog):
             self.cfg.vip_tier_name(job.get("vip_tier")) if job.get("vip_tier") else "ลูกค้าทั่วไป",
             job.get("note") or "",
         ]
-        # ลงแท็บของรอบที่บิลนี้ชำระ (ไม่ใช่รอบปัจจุบันเสมอไป — กันบิลย้อนหลังไปลงผิดแท็บ)
-        paid_at = from_iso(job.get("paid_at")) or now_utc()
-        title = cycle_title(self.cfg, paid_at.astimezone(tz))
+        # ลงแท็บเดือนที่บิลนี้ชำระ (ไม่ใช่เดือนปัจจุบันเสมอไป — กันบิลย้อนหลังไปลงผิดแท็บ)
         if await self.bot.sheets.append_job_row(title, row):
             await self.db.update_job(job["id"], sheet_logged=1)
 
+    async def log_vip_to_sheet(self, order: dict) -> bool:
+        """ลงการขาย VIP ในแท็บบัญชี 1 แถว (เลขที่ V#…) — มีพนักงานแนะนำ = ได้ค่าคอม ที่เหลือเข้าร้าน"""
+        if not self.bot.sheets.ready or order.get("sheet_logged"):
+            return False
+        guild = self.bot.get_guild(order["guild_id"])
+        title, label, paid = self._sheet_place(order.get("paid_at"))
+        pkg = self.cfg.vip_package(order["package_key"]) or {}
+        seller = order.get("seller_id")
+        commission = float(order.get("commission") or 0)
+        notes = []
+        if order.get("discount_code"):
+            notes.append(f"โค้ด {order['discount_code']} -{order['discount_amount']:,.0f}")
+        if seller:
+            notes.append(f"ค่าคอม {self.cfg.vip_commission_percent:g}%")
+        row = [
+            f"V#{order['id']}",
+            label,
+            fmt_date(paid, self.cfg.tz),
+            fmt_time(paid, self.cfg.tz),
+            await display_name(self.bot, guild, order["customer_id"]),
+            f"'{order['customer_id']}",
+            await display_name(self.bot, guild, seller) if seller else "ร้าน",
+            f"'{seller or 0}",
+            f"💎 {pkg.get('name', order['package_key'])}",
+            "",
+            order["total_price"],
+            commission,
+            round(order["total_price"] - commission, 2),
+            "VIP",
+            self.cfg.vip_tier_name(pkg.get("tier")) if pkg.get("tier") else "",
+            " · ".join(notes),
+        ]
+        if not await self.bot.sheets.append_job_row(title, row):
+            return False
+        await self.db.update_vip_order(order["id"], sheet_logged=1)
+        return True
+
     async def sync_unlogged_to_sheet(self) -> dict:
         """ลงชีตย้อนหลังให้บิล/โดเนทที่ชำระแล้วแต่ยังไม่ได้ลง (เช่น ตอนนั้น Sheets ล่ม / ยังไม่ได้เปิดใช้)"""
-        result = {"jobs": 0, "donations": 0, "failed": 0}
+        result = {"jobs": 0, "donations": 0, "vip": 0, "failed": 0}
         if not self.bot.sheets.ready:
             return result
         jobs = await self.db.fetchall(
@@ -468,6 +521,13 @@ class PaymentsCog(commands.Cog):
             await self.log_job_to_sheet(job)
             if (await self.db.get_job(row["id"])).get("sheet_logged"):
                 result["jobs"] += 1
+            else:
+                result["failed"] += 1
+        for o in await self.db.fetchall(
+            "SELECT * FROM vip_orders WHERE status = 'ACTIVE' AND paid_at IS NOT NULL AND COALESCE(sheet_logged,0) = 0 ORDER BY paid_at"
+        ):
+            if await self.log_vip_to_sheet(o):
+                result["vip"] += 1
             else:
                 result["failed"] += 1
         donate = self.bot.get_cog("DonateCog")

@@ -9,7 +9,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from core.cycle import cycle_start_local, cycle_title, next_cutoff_local
+from core.cycle import cycle_label, cycle_start_local, cycle_title, next_cutoff_local
+from core.sheets import month_title
 from core.embeds import COLOR_INFO, COLOR_OK, COLOR_WARN
 from core.utils import (
     discord_ts,
@@ -220,23 +221,26 @@ class SchedulerCog(commands.Cog):
 
         summary = await self.build_summary(previous_start, current_start)
 
-        closed_title = cycle_title(self.cfg, previous_start)
         new_title = cycle_title(self.cfg, now_local)
-        created = await self.bot.sheets.create_cycle_sheet(new_title)
         await self.db.set_meta("current_cycle", new_title)
         await self.db.set_meta("last_cutoff", current_start.date().isoformat())
 
+        last_day = current_start - dt.timedelta(minutes=1)
+        closed_label = cycle_label(self.cfg, previous_start)
+        tabs = sorted({month_title(previous_start), month_title(last_day)})
         if self.bot.sheets.ready:
+            await self.bot.sheets.ensure_month_sheet(month_title(now_local))
             sheet_note = (
-                f"📒 บิลของรอบที่ตัดอยู่ในแท็บ **`{closed_title}`**\n"
-                f"🆕 แท็บรอบใหม่ `{new_title}` (ยังว่างจนกว่าจะมีบิลใหม่)"
+                f"📒 รอบ **{closed_label}** อยู่ในแท็บ " + " และ ".join(f"**`{t}`**" for t in tabs) + "\n"
+                "ดูยอดโอนแต่ละคนได้ที่กล่อง 💸 ด้านขวาของแท็บ (กรองตามรอบ)"
             )
-            if synced["jobs"] or synced["donations"]:
-                sheet_note += f"\n🔁 ลงชีตย้อนหลังให้ {synced['jobs']} บิล · {synced['donations']} โดเนท"
+            done = synced["jobs"] + synced["donations"] + synced["vip"]
+            if done:
+                sheet_note += f"\n🔁 ลงชีตย้อนหลัง {synced['jobs']} บิล · {synced['donations']} โดเนท · {synced['vip']} VIP"
             if synced["failed"]:
                 sheet_note += f"\n⚠️ ลงชีตไม่สำเร็จ {synced['failed']} รายการ (ดู log)"
         else:
-            sheet_note = f"`{new_title}` *(ยังไม่ได้เชื่อม Google Sheets)*"
+            sheet_note = "*(ยังไม่ได้เชื่อม Google Sheets)*"
         summary.add_field(name="📊 Google Sheets", value=sheet_note, inline=False)
         summary.add_field(
             name="ตัดรอบครั้งถัดไป",
@@ -288,9 +292,27 @@ class SchedulerCog(commands.Cog):
                 lines.append(f"• **{name}** — {count} บิล · In {money(gross)} · แบ่ง {money(share)}")
             embed.add_field(name="แยกตามพนักงาน", value="\n".join(lines)[:1024], inline=False)
 
+        payout: dict[int, float] = defaultdict(float)  # ยอดที่ต้องโอนพนักงาน = ส่วนแบ่งบิล + โดเนท + ค่าคอม VIP
+        for job in jobs:
+            payout[job["staff_id"]] += job["staff_share"]
+
+        vips = await self.db.vip_sales_between(to_iso(start_local), to_iso(end_local))
+        if vips:
+            commission = sum(float(v.get("commission") or 0) for v in vips)
+            embed.add_field(
+                name=f"💎 ขาย VIP ({len(vips)} รายการ)",
+                value=f"รวม {money(sum(v['total_price'] for v in vips))} · ค่าคอมพนักงาน {money(commission)}",
+                inline=False,
+            )
+            for v in vips:
+                if v.get("seller_id"):
+                    payout[v["seller_id"]] += float(v.get("commission") or 0)
+
         donate = self.bot.get_cog("DonateCog")
         if donate is not None:
             d = await donate.totals_between(start_local, end_local)
+            for staff_id, amount in d["per_staff"].items():
+                payout[staff_id] += amount
             if d["rows"]:
                 embed.add_field(
                     name=f"🎁 โดเนท ({len(d['rows'])} รายการ)",
@@ -302,6 +324,19 @@ class SchedulerCog(commands.Cog):
                     lines.append(f"• **{await display_name(self.bot, guild, staff_id)}** — {money(amount)}")
                 if lines:
                     embed.add_field(name="โดเนทแยกตามโฮสต์", value="\n".join(lines)[:1024], inline=False)
+
+        if payout:
+            lines = [
+                f"• **{await display_name(self.bot, guild, sid)}** — {money(amount)}"
+                for sid, amount in sorted(payout.items(), key=lambda kv: kv[1], reverse=True)
+                if amount
+            ]
+            if lines:
+                embed.add_field(
+                    name="💸 ยอดที่ต้องโอนพนักงาน (บิล + โดเนท + ค่าคอม VIP)",
+                    value="\n".join(lines)[:1024],
+                    inline=False,
+                )
 
         url = await self.bot.sheets.spreadsheet_url()
         if url:

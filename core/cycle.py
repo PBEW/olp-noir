@@ -24,3 +24,10 @@ def next_cutoff_local(now_local: dt.datetime, cfg: Config) -> dt.datetime:
 def cycle_title(cfg: Config, now_local: dt.datetime | None = None) -> str:
     now_local = now_local or dt.datetime.now(cfg.tz)
     return f"Cycle_{cycle_start_local(now_local, cfg).date().isoformat()}"
+
+
+def cycle_label(cfg: Config, local: dt.datetime) -> str:
+    """ชื่อรอบตัดยอดรายสัปดาห์ที่เวลานี้อยู่ เช่น 03/10–09/10 (ใช้ในคอลัมน์ "รอบ" ของชีต)"""
+    start = cycle_start_local(local, cfg)
+    end = start + dt.timedelta(days=6)
+    return f"{start:%d/%m}–{end:%d/%m}"

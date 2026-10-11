@@ -8,6 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.cycle import cycle_title, next_cutoff_local
+from core.sheets import month_title
 from core.embeds import COLOR_INFO, COLOR_OK
 from core.utils import fmt_datetime, is_admin
 
@@ -85,11 +86,10 @@ class AdminCog(commands.Cog):
         if not self.bot.sheets.ready:
             return discord.Embed(description="⚠️ ยังไม่ได้เชื่อม Google Sheets (google_sheets.enabled / credentials.json)", color=COLOR_INFO)
         synced = await self.bot.get_cog("PaymentsCog").sync_unlogged_to_sheet()
-        title = await self.db.get_meta("current_cycle") or cycle_title(self.cfg)
-        done = await self.bot.sheets.restyle(title)
+        done = await self.bot.sheets.restyle(month_title(dt.datetime.now(self.cfg.tz)))
         url = await self.bot.sheets.spreadsheet_url()
         lines = [f"✅ `{t}`" for t in done]
-        lines.append(f"🔁 ลงชีตย้อนหลัง: {synced['jobs']} บิล · {synced['donations']} โดเนท")
+        lines.append(f"🔁 ลงชีตย้อนหลัง: {synced['jobs']} บิล · {synced['donations']} โดเนท · {synced['vip']} VIP")
         if synced["failed"]:
             lines.append(f"⚠️ ลงไม่สำเร็จ {synced['failed']} รายการ — ดู Console / logs")
         return discord.Embed(

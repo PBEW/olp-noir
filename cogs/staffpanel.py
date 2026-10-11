@@ -84,9 +84,15 @@ class StaffPanelCog(commands.Cog):
         donate = self.bot.get_cog("DonateCog")
         if donate is not None:
             donated = (await donate.totals_between(start, now_local))["per_staff"].get(interaction.user.id, 0.0)
+        commission = sum(
+            float(v.get("commission") or 0)
+            for v in await self.db.vip_sales_between(to_iso(start), to_iso(now_local))
+            if v.get("seller_id") == interaction.user.id
+        )
         embed.add_field(name="ส่วนแบ่งจากบิล", value=money(share), inline=True)
         embed.add_field(name="🎁 โดเนทที่ได้รับ", value=money(donated), inline=True)
-        embed.add_field(name="รวมทั้งหมด", value=f"**{money(share + donated)}**", inline=False)
+        embed.add_field(name="💎 ค่าคอม VIP", value=money(commission), inline=True)
+        embed.add_field(name="รวมทั้งหมด", value=f"**{money(share + donated + commission)}**", inline=False)
         if jobs:
             lines = [
                 f"`#{j['id']}` {self.cfg.service_names(j['services'])} · แบ่ง {money(j['staff_share'])}"

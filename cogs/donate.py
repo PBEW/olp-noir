@@ -277,23 +277,34 @@ class DonateCog(commands.Cog):
             log.warning("ประกาศโดเนทไม่สำเร็จ: %s", exc)
 
     async def _log_to_sheet(self, donation: dict) -> None:
+        """ลงโดเนทในแท็บบัญชีรายเดือนเดียวกับบิล (เลขที่ D#…) เพื่อสรุปยอดโอนพนักงานรวมกันได้"""
         if donation.get("sheet_logged") or not self.bot.sheets.ready:
             return
         guild = self.bot.get_guild(donation["guild_id"])
+        payments = self.bot.get_cog("PaymentsCog")
+        title, label, paid = payments._sheet_place(donation.get("paid_at"))
+        notes = ["ไม่เปิดเผยชื่อ"] if donation["anonymous"] else []
+        if donation.get("message"):
+            notes.append(f"💬 {donation['message']}")
         row = [
-            donation["id"],
-            fmt_datetime(dt.datetime.fromisoformat(donation["paid_at"]), self.cfg.tz),
+            f"D#{donation['id']}",
+            label,
+            paid.strftime("%d/%m/%Y"),
+            paid.strftime("%H:%M"),
             await display_name(self.bot, guild, donation["donor_id"]),
-            str(donation["donor_id"]),
+            f"'{donation['donor_id']}",
             await display_name(self.bot, guild, donation["recipient_id"]) if donation["recipient_id"] else "ร้าน",
-            str(donation["recipient_id"] or ""),
+            f"'{donation['recipient_id'] or 0}",
+            "🎁 โดเนท",
+            "",
             donation["amount"],
             donation["staff_share"],
             donation["shop_share"],
-            "ไม่เปิดเผยชื่อ" if donation["anonymous"] else "",
-            donation.get("message") or "",
+            "โดเนท",
+            "",
+            " · ".join(notes),
         ]
-        if await self.bot.sheets.append_donation_row(row):
+        if await self.bot.sheets.append_job_row(title, row):
             await self.db.update_donation(donation["id"], sheet_logged=1)
 
     # ------------------------------------------------------- สรุป/อันดับ

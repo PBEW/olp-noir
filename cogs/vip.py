@@ -43,13 +43,40 @@ class DiscountModal(discord.ui.Modal, title="ยืนยันการสั�
         await self.shop.checkout(interaction, str(self.code).strip())
 
 
+def staff_members(cfg, guild: discord.Guild | None) -> list[discord.Member]:
+    if guild is None:
+        return []
+    members: dict[int, discord.Member] = {}
+    for role_id in cfg.staff_role_ids:
+        role = guild.get_role(role_id)
+        if role is not None:
+            members.update({m.id: m for m in role.members if not m.bot})
+    return sorted(members.values(), key=lambda m: m.display_name.lower())
+
+
 class VipShopView(discord.ui.View):
-    def __init__(self, cog: "VipCog", buyer_id: int) -> None:
+    def __init__(self, cog: "VipCog", buyer_id: int, guild: discord.Guild | None = None) -> None:
         super().__init__(timeout=600)
         self.cog = cog
         self.cfg = cog.cfg
         self.buyer_id = buyer_id
         self.package_key: str | None = None
+        self.seller_id: int | None = None
+
+        staff = staff_members(self.cfg, guild)
+        if staff:
+            pct = self.cfg.vip_commission_percent
+            self.seller_select = discord.ui.Select(
+                placeholder=f"💃 พนักงานที่แนะนำ (ได้ค่าคอม {pct:g}%) · ไม่บังคับ",
+                row=1,
+                options=[discord.SelectOption(label="ไม่มี / ซื้อเอง", value="none", emoji="🏠", default=True)]
+                + [
+                    discord.SelectOption(label=m.display_name[:100], value=str(m.id), emoji="💃")
+                    for m in staff[:24]
+                ],
+            )
+            self.seller_select.callback = self._on_seller
+            self.add_item(self.seller_select)
 
         purchasable_tiers = {t["key"] for t in self.cfg.purchasable_vip_tiers()}
         packages = [p for p in self.cfg.vip_packages if p["tier"] in purchasable_tiers]
@@ -72,6 +99,13 @@ class VipShopView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return interaction.user.id == self.buyer_id
+
+    async def _on_seller(self, interaction: discord.Interaction) -> None:
+        value = self.seller_select.values[0]
+        self.seller_id = None if value == "none" else int(value)
+        for opt in self.seller_select.options:
+            opt.default = opt.value == value
+        await interaction.response.edit_message(embed=self.embed(), view=self)
 
     async def _on_package(self, interaction: discord.Interaction) -> None:
         value = self.package_select.values[0]
@@ -96,11 +130,13 @@ class VipShopView(discord.ui.View):
             )
         else:
             embed.add_field(name="แพ็กเกจที่เลือก", value="*ยังไม่เลือก*", inline=False)
+        if self.seller_id:
+            embed.add_field(name="พนักงานที่แนะนำ", value=f"<@{self.seller_id}>", inline=False)
         embed.set_footer(text="เลือกแล้วเดี๋ยวบอทส่ง QR ไปทาง DM ค่ะ")
         return embed
 
     @discord.ui.button(
-        label="ยืนยัน & ใส่โค้ดส่วนลด", emoji="🏷️", style=discord.ButtonStyle.primary, row=1
+        label="ยืนยัน & ใส่โค้ดส่วนลด", emoji="🏷️", style=discord.ButtonStyle.primary, row=2
     )
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not self.package_key:
@@ -126,6 +162,8 @@ class VipShopView(discord.ui.View):
             discount_code=used_code,
             discount_amount=discount,
             total_price=total,
+            seller_id=self.seller_id,
+            commission=round(total * self.cfg.vip_commission_percent / 100, 2) if self.seller_id else 0,
             status="AWAITING_PAYMENT",
             created_at=to_iso(now_utc()),
         )
@@ -209,7 +247,7 @@ class VipCog(commands.Cog):
 
     # --------------------------------------------------------------- ร้าน
     async def open_vip_shop(self, interaction: discord.Interaction) -> None:
-        view = VipShopView(self, interaction.user.id)
+        view = VipShopView(self, interaction.user.id, interaction.guild)
         await interaction.response.send_message(embed=view.embed(), view=view, ephemeral=True)
 
     async def check_vip(self, interaction: discord.Interaction) -> None:
@@ -369,9 +407,26 @@ class VipCog(commands.Cog):
 
         await self._check_streak_upgrade(order["guild_id"], order["customer_id"], tier_cfg, new_streak)
 
+        order = await self.db.get_vip_order(order_id)
+        if order.get("seller_id") and order.get("commission"):
+            await send_dm(
+                self.bot,
+                order["seller_id"],
+                embed=discord.Embed(
+                    title="💎 ได้ค่าคอม VIP",
+                    description=(
+                        f"<@{order['customer_id']}> ซื้อ **{pkg['name']}** โดยเลือกคุณเป็นคนแนะนำ\n"
+                        f"ค่าคอมของคุณ **{money(order['commission'])}** (นับรวมในรายได้รอบนี้)"
+                    ),
+                    color=COLOR_GOLD,
+                ),
+            )
+        await self.bot.get_cog("PaymentsCog").log_vip_to_sheet(order)
+        seller_note = f"\nค่าคอม {money(order['commission'])} ให้ <@{order['seller_id']}>" if order.get("seller_id") else ""
+
         return True, (
             f"ยืนยันสลิป VIP `V#{order_id}` แล้ว โดย {admin.mention}\n"
-            f"ตั้งระดับ {tier_cfg['name']} หมดอายุ {fmt_datetime(new_expiry_local, self.cfg.tz)}{role_note}"
+            f"ตั้งระดับ {tier_cfg['name']} หมดอายุ {fmt_datetime(new_expiry_local, self.cfg.tz)}{role_note}{seller_note}"
         )
 
     async def _swap_role(
