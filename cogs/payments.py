@@ -99,6 +99,32 @@ class SlipDecisionButton(
             await interaction.response.send_modal(SlipRejectReasonModal(self.kind, self.ref_id))
 
 
+class JobAckButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"olp:job_ack:(?P<ref>\d+)",
+):
+    """บิลยอด 0 บาท (ใช้สิทธิ์ฟรี) — ลูกค้ากดรับทราบแทนการส่งสลิป เพื่อยืนยันนัดและเปิดแจ้งเตือนเวลา"""
+
+    def __init__(self, ref_id: int) -> None:
+        self.ref_id = ref_id
+        super().__init__(
+            discord.ui.Button(
+                label="รับทราบนัด",
+                emoji="👍",
+                style=discord.ButtonStyle.success,
+                custom_id=f"olp:job_ack:{ref_id}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match: re.Match[str]):
+        return cls(int(match["ref"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
+        cog: PaymentsCog = interaction.client.get_cog("PaymentsCog")  # type: ignore[assignment]
+        await cog.acknowledge_free_job(interaction, self.ref_id)
+
+
 class SlipRejectReasonModal(discord.ui.Modal, title="ปฏิเสธสลิป"):
     reason = discord.ui.TextInput(
         label="หมายเหตุ (ถ้ามี)",
@@ -140,7 +166,10 @@ class PaymentsCog(commands.Cog):
 
     # ------------------------------------------------------- เริ่มเก็บเงิน
     async def start_job_payment(self, job: dict) -> None:
-        """ส่งสรุปยอด + QR ให้ลูกค้าใน DM และเปิดสถานะรอสลิป"""
+        """ส่งสรุปยอด + QR ให้ลูกค้าใน DM และเปิดสถานะรอสลิป (ยอด 0 บาท → ส่งปุ่มรับทราบแทน)"""
+        if job["total_price"] <= 0:
+            await self._send_free_job_ack(job)
+            return
         embed = payment_embed(
             self.cfg,
             title="💳 สรุปยอดชำระเงิน",
@@ -158,6 +187,41 @@ class PaymentsCog(commands.Cog):
                 f"(ลูกค้าปิด DM)",
                 topic="slip",
             )
+
+    async def _send_free_job_ack(self, job: dict) -> None:
+        embed = job_embed(self.cfg, job, title="🎟️ ยืนยันนัด (ใช้สิทธิ์ฟรี)", color=COLOR_INFO)
+        embed.description = (
+            "บิลนี้ยอด **0 บาท** ไม่ต้องโอนและไม่ต้องส่งสลิปค่ะ\n"
+            "กด **👍 รับทราบนัด** เพื่อยืนยัน แล้วบอทจะแจ้งเตือนก่อนถึงเวลาให้นะคะ"
+        )
+        view = discord.ui.View(timeout=None)
+        view.add_item(JobAckButton(job["id"]))
+        sent = await send_dm(self.bot, job["customer_id"], embed=embed, view=view)
+        if sent is None:
+            await self.notify_admin_text(
+                f"⚠️ ส่ง DM ยืนยันนัดบิล `#{job['id']}` (ยอด 0 บาท) ถึง <@{job['customer_id']}> ไม่สำเร็จ "
+                "(ลูกค้าปิด DM) — กด ✅ ชำระแล้ว ในเมนูรีเซปชั่นแทนได้",
+                topic="slip",
+            )
+
+    async def acknowledge_free_job(self, interaction: discord.Interaction, job_id: int) -> None:
+        job = await self.db.get_job(job_id)
+        if job is None or interaction.user.id != job["customer_id"]:
+            await interaction.response.send_message("ปุ่มนี้สำหรับลูกค้าของบิลนี้ค่ะ", ephemeral=True)
+            return
+        if job["total_price"] > 0:
+            await interaction.response.send_message("บิลนี้มียอดชำระ ต้องส่งสลิปค่ะ", ephemeral=True)
+            return
+        await interaction.response.defer()
+        ok, _ = await self.mark_job_paid(job_id, interaction.user)
+        if not ok:
+            await interaction.followup.send("บิลนี้ยืนยันไปแล้ว หรือถูกยกเลิกแล้วค่ะ")
+            return
+        await interaction.edit_original_response(view=None)
+        await self.notify_admin_text(
+            f"👍 <@{job['customer_id']}> กดรับทราบนัดบิล `#{job_id}` (ยอด 0 บาท · ใช้สิทธิ์ฟรี) แล้ว",
+            topic="slip",
+        )
 
     async def start_vip_payment(self, order: dict) -> None:
         package = self.cfg.vip_package(order["package_key"])
@@ -337,17 +401,20 @@ class PaymentsCog(commands.Cog):
         await self.db.clear_pending_slip(job["customer_id"])
         job = await self.db.get_job(job_id)
 
+        free = job["total_price"] <= 0
         await send_dm(
             self.bot,
             job["customer_id"],
-            embed=job_embed(self.cfg, job, title="✅ ชำระเงินสำเร็จ", color=COLOR_OK),
+            embed=job_embed(
+                self.cfg, job, title="✅ ยืนยันนัดแล้ว" if free else "✅ ชำระเงินสำเร็จ", color=COLOR_OK
+            ),
         )
         for sid, share in job_shares(job).items():
             await send_dm(
                 self.bot,
                 sid,
                 embed=discord.Embed(
-                    title="💰 ลูกค้าชำระเงินแล้ว",
+                    title="👍 ลูกค้ายืนยันนัดแล้ว (ใช้สิทธิ์ฟรี)" if free else "💰 ลูกค้าชำระเงินแล้ว",
                     description=(
                         f"บิล `#{job_id}` ยอด {money(job['total_price'])}\n"
                         f"ส่วนแบ่งของคุณ: **{money(share)}**"
@@ -595,5 +662,5 @@ class PaymentsCog(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    bot.add_dynamic_items(SlipConfirmButton, SlipDecisionButton)
+    bot.add_dynamic_items(SlipConfirmButton, SlipDecisionButton, JobAckButton)
     await bot.add_cog(PaymentsCog(bot))
