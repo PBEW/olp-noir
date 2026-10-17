@@ -350,6 +350,80 @@ def _apply_service(svc: dict, v: dict) -> None:
         svc["staff_share"] = _num(share)
 
 
+def _pair(text: str, label_a: str, label_b: str, default_b: float, **limits) -> tuple[float, float]:
+    """แยก "79 / 100" → (79, 100) · ไม่ใส่ส่วนหลัง = default_b"""
+    a, _, b = text.partition("/")
+    first = _parse_number(a or "0", label_a, **limits)
+    second = _parse_number(b, label_b, maximum=100) if b.strip() else default_b
+    return first, second
+
+
+def _multi_fields(svc: dict) -> list[dict]:
+    return [
+        {
+            "name": "staff",
+            "label": "พนักงาน: รวมในราคา / สูงสุดต่อบิล",
+            "default": f"{svc.get('included_staff', 1)} / {svc.get('max_staff', 10)}",
+            "placeholder": "เช่น 1 / 3 (สูงสุด 1 = ห้ามหลายพนักงาน)",
+            "max_length": 10,
+        },
+        {
+            "name": "staff_price",
+            "label": "ค่าพนักงานเพิ่มต่อคน (บาท) / % ที่พนักงานได้",
+            "default": f"{_num(svc.get('extra_staff_price', 0))} / {_num(svc.get('extra_staff_percent', 100))}",
+            "placeholder": "เช่น 79 / 100 (0 = ไม่คิดเพิ่ม หารส่วนพนักงานเดิม)",
+            "max_length": 20,
+        },
+        {
+            "name": "cust",
+            "label": "ลูกค้าสูงสุดต่อบิล",
+            "default": svc.get("max_customers", 10),
+            "placeholder": "เช่น 2 (1 = ลูกค้าคนเดียว)",
+            "max_length": 3,
+        },
+        {
+            "name": "cust_price",
+            "label": "ค่าลูกค้าเพิ่มต่อคน (บาท) / % ที่พนักงานได้",
+            "default": f"{_num(svc.get('extra_customer_price', 0))} / {_num(svc.get('extra_customer_percent', 100))}",
+            "placeholder": "เช่น 39 / 100 (0 = ไม่คิดเพิ่ม)",
+            "max_length": 20,
+        },
+    ]
+
+
+def _apply_multi(svc: dict, v: dict) -> None:
+    included, max_staff = _pair(v["staff"], "พนักงานที่รวมในราคา", "พนักงานสูงสุด", 10, minimum=1, maximum=25)
+    if max_staff < 1 or max_staff > 25:
+        raise ValueError("พนักงานสูงสุด: ต้องอยู่ระหว่าง 1–25")
+    staff_price, staff_pct = _pair(v["staff_price"], "ค่าพนักงานเพิ่ม", "% พนักงาน", 100)
+    cust_price, cust_pct = _pair(v["cust_price"], "ค่าลูกค้าเพิ่ม", "% พนักงาน", 100)
+    svc["included_staff"] = int(included)
+    svc["max_staff"] = int(max_staff)
+    svc["extra_staff_price"] = _num(staff_price)
+    svc["extra_staff_percent"] = _num(staff_pct)
+    svc["max_customers"] = int(_parse_number(v["cust"], "ลูกค้าสูงสุด", minimum=1, maximum=25))
+    svc["extra_customer_price"] = _num(cust_price)
+    svc["extra_customer_percent"] = _num(cust_pct)
+
+
+def _multi_summary(svc: dict) -> str:
+    parts = []
+    max_staff = int(svc.get("max_staff", 10))
+    if max_staff <= 1:
+        parts.append("💃 คนเดียว")
+    elif svc.get("extra_staff_price"):
+        parts.append(
+            f"💃 รวม {svc.get('included_staff', 1)} คน เพิ่ม +{_num(svc['extra_staff_price'])}/คน "
+            f"(พนักงานได้ {_num(svc.get('extra_staff_percent', 100))}%) สูงสุด {max_staff}"
+        )
+    max_cust = int(svc.get("max_customers", 10))
+    if max_cust <= 1:
+        parts.append("👤 คนเดียว")
+    elif svc.get("extra_customer_price"):
+        parts.append(f"👤 เพิ่ม +{_num(svc['extra_customer_price'])}/คน สูงสุด {max_cust}")
+    return ("\n　" + " · ".join(parts)) if parts else ""
+
+
 class ServicesView(Section):
     def __init__(self, cfg) -> None:
         super().__init__(cfg)
@@ -371,8 +445,19 @@ class ServicesView(Section):
             vip = " / ".join(format_price(p.get(t, p.get("normal", 0))) for t in TIERS)
             room = " · 🚪ต้องใช้ห้อง" if s.get("require_room") else ""
             room += f" · 💃พนักงาน {_num(s['staff_share'])} บาท" if s.get("staff_share") is not None else " · 💃พนักงานตาม %"
-            lines.append(f"{s.get('emoji', '•')} **{s['name']}** — {format_price(p.get('normal', 0))} บาท / {s.get('duration_minutes', 60)} นาที\n　VIP: {vip}{room}")
+            lines.append(
+                f"{s.get('emoji', '•')} **{s['name']}** — {format_price(p.get('normal', 0))} บาท / {s.get('duration_minutes', 60)} นาที\n　VIP: {vip}{room}"
+                + _multi_summary(s)
+            )
         embed = discord.Embed(title="🛎️ บริการ & ราคา", description="\n".join(lines)[:4000] or "-", color=COLOR_INFO)
+        embed.add_field(
+            name="👥 หลายคน (ปุ่ม 👥)",
+            value=(
+                "ตั้งต่อบริการ: พนักงานที่รวมในราคา / สูงสุด · ค่าพนักงานเพิ่มต่อคน · ลูกค้าสูงสุด · ค่าลูกค้าเพิ่มต่อคน\n"
+                "แนะนำ: ค่าพนักงานเพิ่ม = ส่วนพนักงานของบริการนั้น แล้วให้พนักงานได้ 100% → ทุกคนได้เท่ามาเดี่ยว ร้านได้เท่าเดิม"
+            ),
+            inline=False,
+        )
         embed.set_footer(text="รูปแบบราคา VIP: 99 = ราคาคงที่ · ฟรี2 = ฟรี 2 ครั้ง/เดือนแล้วคิดราคาปกติ · ฟรี1+69 = ฟรี 1 ครั้งแล้วคิด 69 · ไม่จำกัด")
         return embed
 
@@ -399,6 +484,19 @@ class ServicesView(Section):
             await self.refresh(inter)
 
         await interaction.response.send_modal(SimpleModal("แก้บริการ", _service_fields(svc), done))
+
+    @discord.ui.button(label="หลายคน", emoji="👥", style=discord.ButtonStyle.secondary, row=1)
+    async def multi(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if await self._need_selected(interaction):
+            return
+        svc = self.cfg.service(self.selected)
+
+        async def done(inter, v):
+            _apply_multi(svc, v)
+            await _save(inter, f"ตั้งค่าหลายคนของ **{svc['name']}**:{_multi_summary(svc) or ' ปิด (คนเดียว)'}")
+            await self.refresh(inter)
+
+        await interaction.response.send_modal(SimpleModal(f"👥 หลายคน · {svc['name']}", _multi_fields(svc), done))
 
     @discord.ui.button(label="ลบบริการ", emoji="🗑️", style=discord.ButtonStyle.danger, row=1)
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:

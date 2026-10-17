@@ -10,7 +10,7 @@ from discord.ext import commands
 
 from core.cycle import cycle_label
 from core.sheets import month_title
-from core.pricing import job_shares, job_staff_ids, job_staff_mentions, release_quota_for_job
+from core.pricing import job_customer_ids, job_shares, job_staff_ids, job_staff_mentions, release_quota_for_job
 from core.embeds import (
     COLOR_DANGER,
     COLOR_GOLD,
@@ -460,7 +460,8 @@ class PaymentsCog(commands.Cog):
         )
         if reason:
             note.add_field(name="เหตุผล", value=reason, inline=False)
-        await send_dm(self.bot, job["customer_id"], embed=note)
+        for cid in job_customer_ids(job):
+            await send_dm(self.bot, cid, embed=note)
         for sid in job_staff_ids(job):
             await send_dm(self.bot, sid, embed=note)
 
@@ -529,7 +530,7 @@ class PaymentsCog(commands.Cog):
             label,
             fmt_date(start, tz),
             f"{fmt_time(start, tz)}–{fmt_time(end, tz)}",
-            await display_name(self.bot, guild, job["customer_id"]),
+            ", ".join([await display_name(self.bot, guild, cid) for cid in job_customer_ids(job)]),
             f"'{job['customer_id']}",
             await display_name(self.bot, guild, job["staff_id"]),
             f"'{job['staff_id']}",
@@ -544,6 +545,8 @@ class PaymentsCog(commands.Cog):
                 job.get("note") or "",
                 f"พนักงาน {len(shares)} คน" if len(shares) > 1 else "",
                 f"กลุ่มบิล #{job['group_id']}" if job.get("group_id") else "",
+                f"ลูกค้า {len(job_customer_ids(job))} คน (คนแรกจ่าย)" if len(job_customer_ids(job)) > 1 else "",
+                "คีย์ย้อนหลัง" if job.get("backfilled") else "",
             ])),
         ]
         # ลงแท็บเดือนที่บิลนี้ชำระ (ไม่ใช่เดือนปัจจุบันเสมอไป — กันบิลย้อนหลังไปลงผิดแท็บ)

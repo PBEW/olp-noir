@@ -11,7 +11,16 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.embeds import COLOR_DANGER, COLOR_INFO, COLOR_MAIN, COLOR_OK, COLOR_WARN, job_embed, panel_embed
-from core.pricing import job_staff_ids, job_staff_mentions, quote_services, reserve_quota_for_job, split_quote_multi
+from core.cycle import cycle_start_local
+from core.pricing import (
+    job_customer_ids,
+    job_staff_ids,
+    job_staff_mentions,
+    quote_services,
+    reserve_quota_for_job,
+    split_quote_multi,
+    validate_selection,
+)
 from core.utils import (
     TimeParseError,
     discord_ts,
@@ -27,6 +36,8 @@ from core.utils import (
     to_iso,
 )
 from core.vip_logic import active_tier, cycle_month_key
+
+BACKFILL_MAX_DAYS = 31
 
 log = logging.getLogger("olp.reception")
 
@@ -111,23 +122,32 @@ def accept_view(job_id: int) -> discord.ui.View:
 
 # ------------------------------------------------------------ Modal เวลา
 class BillDetailModal(discord.ui.Modal, title="รายละเอียดบิล"):
-    start_time = discord.ui.TextInput(
-        label="เวลาเริ่มงาน",
-        placeholder="ตอนนี้ / +15 / 20:30 / 05/09 20:30",
-        default="ตอนนี้",
-        required=True,
-        max_length=32,
-    )
-    note = discord.ui.TextInput(
-        label="หมายเหตุ",
-        style=discord.TextStyle.paragraph,
-        required=False,
-        max_length=400,
-    )
-
     def __init__(self, wizard: "OpenBillWizard") -> None:
-        super().__init__()
+        super().__init__(title="🕘 คีย์บิลย้อนหลัง" if wizard.backfill else "รายละเอียดบิล")
         self.wizard = wizard
+        if wizard.backfill:
+            self.start_time = discord.ui.TextInput(
+                label="วันที่และเวลาที่เริ่มงานจริง",
+                placeholder="เช่น 05/09 21:30 (ย้อนหลังได้ไม่เกิน 31 วัน)",
+                required=True,
+                max_length=32,
+            )
+        else:
+            self.start_time = discord.ui.TextInput(
+                label="เวลาเริ่มงาน",
+                placeholder="ตอนนี้ / +15 / 20:30 / 05/09 20:30",
+                default="ตอนนี้",
+                required=True,
+                max_length=32,
+            )
+        self.note = discord.ui.TextInput(
+            label="หมายเหตุ",
+            style=discord.TextStyle.paragraph,
+            required=False,
+            max_length=400,
+        )
+        self.add_item(self.start_time)
+        self.add_item(self.note)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         await self.wizard.submit(interaction, str(self.start_time), str(self.note))
@@ -136,23 +156,36 @@ class BillDetailModal(discord.ui.Modal, title="รายละเอียดบ
 # ---------------------------------------------------------- Wizard เปิดบิล
 class OpenBillWizard(discord.ui.View):
     """แผงเลือกข้อมูลเปิดบิลแบบขั้นตอนเดียว (ephemeral)
-    เลือกลูกค้าได้หลายคน (แยกบิลให้คนละใบ จ่ายเงินแยกกัน) และพนักงานได้หลายคน (ใช้ร่วมกันทุกบิล)"""
+
+    - ลูกค้าหลายคน = บิลเดียว มีคนจ่าย 1 คน (กด 💳 คนจ่าย เพื่อสลับ) คิดค่าลูกค้าเพิ่มตามที่ตั้งในบริการ
+    - พนักงานหลายคน = คิดค่าพนักงานเพิ่มตามที่ตั้งในบริการ คนแรกที่เลือกเป็นพนักงานหลัก (กดรับงาน)
+    - backfill = คีย์บิลย้อนหลัง (เลือกพนักงานได้ทุกคน ไม่ส่ง DM บันทึกเป็นชำระแล้ว)
+    """
 
     MAX_CUSTOMERS = 10
     MAX_STAFF = 10
 
-    def __init__(self, cog: "ReceptionCog", opener: discord.Member, working: list[tuple[discord.Member, str]]) -> None:
+    def __init__(
+        self,
+        cog: "ReceptionCog",
+        opener: discord.Member,
+        staff_options: list[tuple[discord.Member, str]],
+        *,
+        backfill: bool = False,
+    ) -> None:
         super().__init__(timeout=600)
         self.cog = cog
         self.cfg = cog.cfg
         self.opener = opener
+        self.backfill = backfill
         self.customer_ids: list[int] = []
+        self.payer_id: int | None = None
         self.staff_ids: list[int] = []
         self.service_keys: list[str] = []
         self.room_key: str | None = None
 
         self.customer_select = discord.ui.UserSelect(
-            placeholder=f"👤 เลือกลูกค้า (ได้สูงสุด {self.MAX_CUSTOMERS} คน · แยกบิลคนละใบ)",
+            placeholder=f"👤 เลือกลูกค้า (ได้สูงสุด {self.MAX_CUSTOMERS} คนในบิลเดียว)",
             min_values=1,
             max_values=self.MAX_CUSTOMERS,
             row=0,
@@ -160,17 +193,22 @@ class OpenBillWizard(discord.ui.View):
         self.customer_select.callback = self._on_customer
         self.add_item(self.customer_select)
 
-        # เลือกได้เฉพาะพนักงานที่กดเข้างานวันนี้แล้ว · เลือกได้หลายคน (ทำงานร่วมกัน)
+        placeholder = (
+            f"💃 เลือกพนักงาน (ทั้งหมด {len(staff_options)} คน · เลือกได้หลายคน)"
+            if backfill
+            else f"💃 เลือกพนักงาน (เข้างานวันนี้ {len(staff_options)} คน · เลือกได้หลายคน)"
+        )
         self.staff_select = discord.ui.Select(
-            placeholder=f"💃 เลือกพนักงาน (เข้างานวันนี้ {len(working)} คน · เลือกได้หลายคน)",
+            placeholder=placeholder,
             min_values=1,
-            max_values=max(1, min(len(working), self.MAX_STAFF, 25)),
+            max_values=max(1, min(len(staff_options), self.MAX_STAFF, 25)),
             row=1,
             options=[
                 discord.SelectOption(
-                    label=m.display_name[:100], value=str(m.id), emoji="🟢", description=f"เข้างาน {since} น."
+                    label=m.display_name[:100], value=str(m.id), emoji="⚪" if backfill else "🟢",
+                    description=desc[:100] or None,
                 )
-                for m, since in working[:25]
+                for m, desc in staff_options[:25]
             ],
         )
         self.staff_select.callback = self._on_staff
@@ -212,6 +250,10 @@ class OpenBillWizard(discord.ui.View):
         self.room_select.callback = self._on_room
         self.add_item(self.room_select)
 
+        if backfill:
+            self.confirm.label = "กรอกวันเวลา & บันทึกบิลย้อนหลัง"
+            self.confirm.emoji = "🕘"
+
     # ------------------------------------------------------------ callbacks
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.opener.id:
@@ -221,6 +263,8 @@ class OpenBillWizard(discord.ui.View):
 
     async def _on_customer(self, interaction: discord.Interaction) -> None:
         self.customer_ids = [u.id for u in self.customer_select.values if not u.bot]
+        if self.payer_id not in self.customer_ids:
+            self.payer_id = self.customer_ids[0] if self.customer_ids else None
         await self._refresh(interaction)
 
     async def _on_staff(self, interaction: discord.Interaction) -> None:
@@ -233,6 +277,15 @@ class OpenBillWizard(discord.ui.View):
 
     async def _on_room(self, interaction: discord.Interaction) -> None:
         self.room_key = self.room_select.values[0]
+        await self._refresh(interaction)
+
+    @discord.ui.button(label="คนจ่าย", emoji="💳", style=discord.ButtonStyle.secondary, row=4)
+    async def payer(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if len(self.customer_ids) < 2:
+            await interaction.response.send_message("เลือกลูกค้ามากกว่า 1 คนก่อน ถึงจะสลับคนจ่ายได้ค่ะ", ephemeral=True)
+            return
+        index = self.customer_ids.index(self.payer_id) if self.payer_id in self.customer_ids else -1
+        self.payer_id = self.customer_ids[(index + 1) % len(self.customer_ids)]
         await self._refresh(interaction)
 
     @discord.ui.button(
@@ -251,6 +304,10 @@ class OpenBillWizard(discord.ui.View):
             (self.cfg.service(key) or {}).get("require_room") for key in self.service_keys
         )
 
+    def _ordered_customers(self) -> list[int]:
+        """คนจ่ายอยู่คนแรกเสมอ"""
+        return [self.payer_id, *[c for c in self.customer_ids if c != self.payer_id]] if self.payer_id else []
+
     def _validate(self) -> str | None:
         if not self.customer_ids:
             return "ยังไม่ได้เลือก **ลูกค้า** ค่ะ"
@@ -260,20 +317,31 @@ class OpenBillWizard(discord.ui.View):
             return "ยังไม่ได้เลือก **บริการ** ค่ะ"
         if self._requires_room() and not self.room_key:
             return "บริการที่เลือกต้องระบุ **ห้อง** ด้วยค่ะ"
-        return None
+        return validate_selection(self.cfg, self.service_keys, len(self.staff_ids), len(self.customer_ids))
 
     async def summary_embed(self) -> discord.Embed:
-        embed = discord.Embed(
-            title="🧾 เปิดบิลใหม่",
-            description=(
-                "เลือกข้อมูลให้ครบ แล้วกดปุ่ม **กรอกเวลา & ยืนยันเปิดบิล**\n"
-                "-# ลูกค้าหลายคน = แยกบิลคนละใบ (ราคา/สิทธิ์ VIP ของใครของมัน) · พนักงานหลายคน = ทำงานร่วมกันทุกบิล"
-            ),
-            color=COLOR_MAIN,
+        title = "🕘 คีย์บิลย้อนหลัง" if self.backfill else "🧾 เปิดบิลใหม่"
+        intro = (
+            "สำหรับบิลที่ทำไปแล้วแต่ไม่ได้คีย์ (บอทล่ม/ลืม) — บันทึกเป็น **ชำระแล้ว** ทันที ไม่ส่ง DM\n"
+            if self.backfill
+            else ""
         )
+        embed = discord.Embed(
+            title=title,
+            description=(
+                intro
+                + "เลือกข้อมูลให้ครบ แล้วกดปุ่มยืนยันด้านล่าง\n"
+                "-# ลูกค้าหลายคน = บิลเดียว คนจ่าย 💳 คนเดียว · พนักงานหลายคน = คนแรกเป็นคนกดรับงาน"
+            ),
+            color=COLOR_WARN if self.backfill else COLOR_MAIN,
+        )
+        customers = self._ordered_customers()
         embed.add_field(
-            name=f"ลูกค้า ({len(self.customer_ids)})" if self.customer_ids else "ลูกค้า",
-            value=", ".join(f"<@{c}>" for c in self.customer_ids) or "*ยังไม่เลือก*",
+            name=f"ลูกค้า ({len(customers)})" if customers else "ลูกค้า",
+            value="\n".join(
+                f"<@{c}>" + (" · 💳 **คนจ่าย**" if c == self.payer_id and len(customers) > 1 else "")
+                for c in customers
+            ) or "*ยังไม่เลือก*",
             inline=True,
         )
         embed.add_field(
@@ -292,35 +360,49 @@ class OpenBillWizard(discord.ui.View):
             inline=False,
         )
 
-        if self.service_keys and self.customer_ids and self.staff_ids:
+        problem = validate_selection(self.cfg, self.service_keys, len(self.staff_ids), len(self.customer_ids))
+        if problem:
+            embed.add_field(name="⚠️ ใช้ไม่ได้", value=problem, inline=False)
+        elif self.service_keys and self.customer_ids and self.staff_ids:
             now_local = dt.datetime.now(self.cfg.tz)
-            total_in = total_shop = 0.0
-            payout: dict[int, float] = {sid: 0.0 for sid in self.staff_ids}
-            lines = []
-            for cid in self.customer_ids:
-                tier = await active_tier(self.cog.db, cid, now_local)
-                quote = await quote_services(
-                    self.cfg, self.cog.db, self.service_keys, customer_id=cid, tier=tier, now_local=now_local
-                )
-                shares, shop = split_quote_multi(self.cfg, self.staff_ids, quote)
-                total_in += quote.total_price
-                total_shop += shop
-                for sid, amount in shares.items():
-                    payout[sid] += amount
-                tier_note = f" · {self.cfg.vip_tier_name(tier)}" if tier else ""
-                lines.append(f"<@{cid}> — **{money(quote.total_price)}**{tier_note}")
-            embed.add_field(name="💵 ยอดแต่ละบิล", value="\n".join(lines)[:1024], inline=False)
-            embed.add_field(name="รายรับรวม (In)", value=money(total_in), inline=True)
-            embed.add_field(name="จ่ายพนักงาน (Out)", value=money(sum(payout.values())), inline=True)
-            embed.add_field(name="ร้านได้สุทธิ", value=f"**{money(total_shop)}**", inline=True)
-            if len(self.staff_ids) > 1:
+            tier = await active_tier(self.cog.db, self.payer_id, now_local)
+            quote = await quote_services(
+                self.cfg, self.cog.db, self.service_keys, customer_id=self.payer_id, tier=tier,
+                now_local=now_local, staff_count=len(self.staff_ids), customer_count=len(self.customer_ids),
+            )
+            shares, shop = split_quote_multi(self.cfg, self.staff_ids, quote)
+            tier_note = f"\n{self.cfg.vip_tier_name(tier)} (ของคนจ่าย) — คิดราคา/สิทธิ์ตามระดับอัตโนมัติ" if tier else ""
+            embed.add_field(
+                name="💵 รายการ",
+                value=f"{quote.breakdown}\n**รวม {money(quote.total_price)}** · {quote.duration_minutes} นาที{tier_note}"[:1024],
+                inline=False,
+            )
+            embed.add_field(name="รายรับ (In)", value=money(quote.total_price), inline=True)
+            embed.add_field(name="จ่ายพนักงาน (Out)", value=money(sum(shares.values())), inline=True)
+            embed.add_field(name="ร้านได้สุทธิ", value=f"**{money(shop)}**", inline=True)
+            if len(shares) > 1:
                 embed.add_field(
                     name="💃 พนักงานได้คนละ",
-                    value="\n".join(f"<@{sid}> — {money(v)}" for sid, v in payout.items())[:1024],
+                    value="\n".join(f"<@{sid}> — {money(v)}" for sid, v in shares.items())[:1024],
                     inline=False,
                 )
-            if total_shop < 0:
-                embed.add_field(name="⚠️ ร้านขาดทุน", value="ส่วนพนักงานรวมมากกว่ายอดที่ลูกค้าจ่าย (เช่น ใช้สิทธิ์ฟรี VIP หรือโหมดได้เต็มทุกคน)", inline=False)
+            if shop < 0:
+                embed.add_field(
+                    name="⚠️ ร้านขาดทุน",
+                    value="ส่วนพนักงานมากกว่ายอดที่ลูกค้าจ่าย (เช่น ใช้สิทธิ์ฟรี VIP หรือโหมดได้เต็มทุกคน)",
+                    inline=False,
+                )
+        if self.room_key and self._requires_room() and not self.backfill:
+            busy = await self.cog.room_busy_now(self.room_key)
+            if busy:
+                embed.add_field(
+                    name=f"⚠️ ห้อง {self.cfg.room_name(self.room_key)} มีคนใช้อยู่",
+                    value="\n".join(
+                        f"`#{j['id']}` ถึง {discord_ts(from_iso(j['end_time']))} · {job_staff_mentions(j)}" for j in busy
+                    )[:1024]
+                    + "\n-# เปิดบิลได้ แต่เช็กเวลาให้ไม่ชนกันนะคะ",
+                    inline=False,
+                )
         if self._requires_room() and not self.room_key:
             embed.set_footer(text="⚠️ บริการที่เลือกต้องระบุห้อง")
         return embed
@@ -340,39 +422,50 @@ class OpenBillWizard(discord.ui.View):
         except TimeParseError as exc:
             await interaction.response.send_message(f"⚠️ {exc}", ephemeral=True)
             return
+        if self.backfill:
+            now = now_utc()
+            if start > now:
+                await interaction.response.send_message(
+                    "⚠️ บิลย้อนหลังต้องเป็นเวลาที่ผ่านมาแล้ว ใส่วันที่ด้วย เช่น `05/09 21:30`", ephemeral=True
+                )
+                return
+            if start < now - dt.timedelta(days=BACKFILL_MAX_DAYS):
+                await interaction.response.send_message(
+                    f"⚠️ คีย์ย้อนหลังได้ไม่เกิน {BACKFILL_MAX_DAYS} วันค่ะ", ephemeral=True
+                )
+                return
 
         await interaction.response.defer()
-        job_ids: list[int] = []
-        for cid in self.customer_ids:
-            job_ids.append(
-                await self.cog.create_job(
-                    guild=interaction.guild,
-                    opener=interaction.user,
-                    customer_id=cid,
-                    staff_ids=self.staff_ids,
-                    service_keys=self.service_keys,
-                    room_key=self.room_key if self._requires_room() else None,
-                    note=note.strip(),
-                    start=start,
-                    group_id=job_ids[0] if job_ids else None,
-                )
-            )
-        if len(job_ids) > 1:
-            await self.cog.db.update_job(job_ids[0], group_id=job_ids[0])
+        job_id = await self.cog.create_job(
+            guild=interaction.guild,
+            opener=interaction.user,
+            customer_ids=self._ordered_customers(),
+            staff_ids=self.staff_ids,
+            service_keys=self.service_keys,
+            room_key=self.room_key if self._requires_room() else None,
+            note=note.strip(),
+            start=start,
+            backfill=self.backfill,
+        )
+        job = await self.cog.db.get_job(job_id)
 
         self.stop()
-        if len(job_ids) == 1:
-            job = await self.cog.db.get_job(job_ids[0])
-            embed = job_embed(self.cfg, job, title="✅ เปิดบิลแล้ว", color=COLOR_OK)
-        else:
-            jobs = [await self.cog.db.get_job(j) for j in job_ids]
-            embed = discord.Embed(title=f"✅ เปิดบิลกลุ่มแล้ว {len(jobs)} ใบ", color=COLOR_OK)
-            embed.description = "\n".join(
-                f"`#{j['id']}` <@{j['customer_id']}> · {money(j['total_price'])}" for j in jobs
-            )
-            embed.add_field(name="พนักงาน", value=job_staff_mentions(jobs[0]), inline=True)
-            embed.add_field(name="รายรับรวม", value=money(sum(j["total_price"] for j in jobs)), inline=True)
-            embed.add_field(name="ร้านได้สุทธิ", value=money(sum(j["shop_share"] for j in jobs)), inline=True)
+        title = "🕘 บันทึกบิลย้อนหลังแล้ว" if self.backfill else "✅ เปิดบิลแล้ว"
+        embed = job_embed(self.cfg, job, title=title, color=COLOR_OK)
+        embed.add_field(name="รายรับ", value=money(job["total_price"]), inline=True)
+        embed.add_field(name="จ่ายพนักงาน", value=money(job["staff_share"]), inline=True)
+        embed.add_field(name="ร้านได้สุทธิ", value=money(job["shop_share"]), inline=True)
+        if job.get("room"):
+            clash = [
+                j for j in await self.cog.db.room_jobs_overlapping(job["room"], job["start_time"], job["end_time"])
+                if j["id"] != job["id"]
+            ]
+            if clash:
+                embed.add_field(
+                    name="⚠️ ห้องชนกับบิลอื่น",
+                    value=", ".join(f"`#{j['id']}`" for j in clash)[:1024],
+                    inline=False,
+                )
         await interaction.edit_original_response(embed=embed, view=None)
 
 
@@ -461,7 +554,8 @@ class ExtendWizard(discord.ui.View):
             job = self.jobs[self.job_id]
             tier = await active_tier(self.cog.db, job["customer_id"], dt.datetime.now(self.cfg.tz))
             quote = await quote_services(
-                self.cfg, self.cog.db, self.service_keys, customer_id=job["customer_id"], tier=tier
+                self.cfg, self.cog.db, self.service_keys, customer_id=job["customer_id"], tier=tier,
+                staff_count=len(job_staff_ids(job)), customer_count=len(job_customer_ids(job)),
             )
             embed.add_field(
                 name="แพ็กเกจต่อเวลา",
@@ -574,6 +668,17 @@ class ReceptionPanel(discord.ui.View):
         await interaction.response.send_modal(BillActionModal("info"))
 
     @discord.ui.button(
+        label="คีย์บิลย้อนหลัง",
+        emoji="🕘",
+        style=discord.ButtonStyle.secondary,
+        custom_id="olp:panel:backfill",
+        row=1,
+    )
+    async def backfill(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        cog: ReceptionCog = interaction.client.get_cog("ReceptionCog")  # type: ignore[assignment]
+        await cog.open_bill_panel(interaction, backfill=True)
+
+    @discord.ui.button(
         label="คนมาทำงานวันนี้",
         emoji="👥",
         style=discord.ButtonStyle.secondary,
@@ -652,6 +757,7 @@ def reception_panel_embed(guild: discord.Guild | None) -> discord.Embed:
                 ("✅ ยืนยันชำระเงิน", "ลูกค้าจ่ายแล้วแต่ไม่ได้ส่งสลิปในบอท (เหมือน /bill paid)"),
                 ("❌ ยกเลิกบิล", "ยกเลิกพร้อมเหตุผล ไม่ลงบัญชี (เหมือน /bill cancel)"),
                 ("🔍 ดูบิล", "ดูรายละเอียดบิลจากเลขที่"),
+                ("🕘 คีย์บิลย้อนหลัง", f"บอทล่ม/ลืมคีย์ ใส่ย้อนได้ {BACKFILL_MAX_DAYS} วัน บันทึกเป็นชำระแล้ว ไม่ส่ง DM"),
             ]),
             ("📨 งานที่เข้าห้องอัตโนมัติ", (
                 "💬 ลูกค้าทัก DM ใหม่ → กด **รับเรื่อง**\n"
@@ -672,9 +778,24 @@ class ReceptionCog(commands.Cog):
         self.db = bot.db
 
     # ------------------------------------------------------------- panels
-    async def open_bill_panel(self, interaction: discord.Interaction) -> None:
+    async def open_bill_panel(self, interaction: discord.Interaction, *, backfill: bool = False) -> None:
         if not self._admin_guard(interaction):
             await interaction.response.send_message(NOT_RECEPTION, ephemeral=True)
+            return
+        if backfill:
+            # ย้อนหลัง: เลือกพนักงานได้ทุกคนที่มี Role พนักงาน (วันนั้นอาจไม่ได้กดเข้างาน)
+            role_ids = set(self.cfg.staff_role_ids)
+            members = sorted(
+                (m for m in interaction.guild.members if not m.bot and any(r.id in role_ids for r in m.roles)),
+                key=lambda m: m.display_name.lower(),
+            ) if interaction.guild else []
+            if not members:
+                await interaction.response.send_message(
+                    "ไม่พบพนักงาน — ตั้ง Role พนักงานที่ ⚙️ ตั้งค่าร้าน → 🧭 ระบบบอท ก่อนนะคะ", ephemeral=True
+                )
+                return
+            wizard = OpenBillWizard(self, interaction.user, [(m, "") for m in members], backfill=True)
+            await interaction.response.send_message(embed=await wizard.summary_embed(), view=wizard, ephemeral=True)
             return
         attendance = self.bot.get_cog("AttendanceCog")
         working = []
@@ -751,35 +872,36 @@ class ReceptionCog(commands.Cog):
         *,
         guild: discord.Guild,
         opener: discord.abc.User,
-        customer_id: int,
+        customer_ids: list[int],
         staff_ids: list[int],
         service_keys: list[str],
         room_key: str | None,
         note: str,
         start: dt.datetime,
-        job_type: str = "NORMAL",
-        parent_job_id: int | None = None,
-        group_id: int | None = None,
+        backfill: bool = False,
     ) -> int:
+        """สร้างบิล 1 ใบ · customer_ids[0] = คนจ่าย · staff_ids[0] = พนักงานหลัก (กดรับงาน)"""
+        customer_id = customer_ids[0]
+        staff_id = staff_ids[0]
         now_local = dt.datetime.now(self.cfg.tz)
         tier = await active_tier(self.db, customer_id, now_local)
         quote = await quote_services(
-            self.cfg, self.db, service_keys, customer_id=customer_id, tier=tier, now_local=now_local
+            self.cfg, self.db, service_keys, customer_id=customer_id, tier=tier, now_local=now_local,
+            staff_count=len(staff_ids), customer_count=len(customer_ids),
         )
-        staff_id = staff_ids[0]  # คนแรก = พนักงานหลัก (กดรับงาน)
         shares, shop_share = split_quote_multi(self.cfg, staff_ids, quote)
         staff_share = round(sum(shares.values()), 2)
         end = start + dt.timedelta(minutes=quote.duration_minutes)
         cycle = cycle_month_key(now_local)
+        now_iso = to_iso(now_utc())
 
-        job_id = await self.db.create_job(
+        fields = dict(
             guild_id=guild.id,
-            job_type=job_type,
-            parent_job_id=parent_job_id,
+            job_type="NORMAL",
             customer_id=customer_id,
+            co_customers=json.dumps(customer_ids[1:]) if len(customer_ids) > 1 else None,
             staff_id=staff_id,
             staff_shares=json.dumps({str(k): v for k, v in shares.items()}) if len(shares) > 1 else None,
-            group_id=group_id,
             services=service_keys,
             room=room_key,
             note=note or None,
@@ -794,11 +916,35 @@ class ReceptionCog(commands.Cog):
             shop_share=shop_share,
             status="PENDING_STAFF",
             opened_by=opener.id,
-            created_at=to_iso(now_utc()),
+            created_at=now_iso,
         )
+        if backfill:
+            # บิลย้อนหลัง: จบงานและชำระแล้ว ไม่แจ้งเตือน/ไม่ส่งรีวิว
+            # ถ้าวันที่จริงอยู่ในรอบที่ตัดยอดไปแล้ว → นับเข้ารอบปัจจุบัน (กันยอดหายจากสรุปที่ส่งไปแล้ว)
+            in_cycle = start.astimezone(self.cfg.tz) >= cycle_start_local(now_local, self.cfg)
+            fields.update(
+                status="COMPLETED",
+                accepted_at=to_iso(start),
+                paid_at=to_iso(start) if in_cycle else now_iso,
+                notified_start=1,
+                notified_end=1,
+                review_sent=1,
+                backfilled=1,
+            )
+        job_id = await self.db.create_job(**fields)
         await reserve_quota_for_job(self.db, customer_id, quote, cycle)
-
         job = await self.db.get_job(job_id)
+        payments = self.bot.get_cog("PaymentsCog")
+
+        if backfill:
+            await payments.log_job_to_sheet(job)
+            moved = "" if fields["paid_at"] == to_iso(start) else " · ⚠️ วันที่อยู่ในรอบที่ตัดยอดไปแล้ว นับเข้ารอบนี้แทน"
+            await payments.notify_admin_text(
+                f"🕘 {opener.mention} คีย์บิลย้อนหลัง `#{job_id}` · {discord_ts(start)} · "
+                f"{money(quote.total_price)} · พนักงาน {job_staff_mentions(job)}{moved}"
+            )
+            return job_id
+
         embed = job_embed(self.cfg, job, title="🔔 มีงานใหม่เข้ามา", color=COLOR_WARN)
         embed.add_field(name="ส่วนแบ่งของคุณ", value=money(shares[staff_id]), inline=True)
         sent = await send_dm(self.bot, staff_id, embed=embed, view=accept_view(job_id))
@@ -811,12 +957,16 @@ class ReceptionCog(commands.Cog):
             if await send_dm(self.bot, sid, embed=info) is None:
                 failed.append(sid)
         if failed:
-            payments = self.bot.get_cog("PaymentsCog")
             await payments.notify_admin_text(
                 f"⚠️ ส่ง DM แจ้งงานบิล `#{job_id}` ถึงพนักงาน "
                 + ", ".join(f"<@{sid}>" for sid in failed) + " ไม่สำเร็จ (ปิด DM อยู่)"
             )
         return job_id
+
+    async def room_busy_now(self, room_key: str) -> list[dict]:
+        """บิลที่ใช้ห้องนี้อยู่ตอนนี้ หรือจองไว้ในอีก 3 ชม."""
+        now = now_utc()
+        return await self.db.room_jobs_overlapping(room_key, to_iso(now), to_iso(now + dt.timedelta(hours=3)))
 
     async def create_extend(
         self,
@@ -835,6 +985,8 @@ class ReceptionCog(commands.Cog):
             customer_id=parent["customer_id"],
             tier=tier,
             now_local=now_local,
+            staff_count=len(job_staff_ids(parent)),
+            customer_count=len(job_customer_ids(parent)),
         )
         shares, shop_share = split_quote_multi(self.cfg, job_staff_ids(parent), quote)
         staff_share = round(sum(shares.values()), 2)
@@ -850,7 +1002,7 @@ class ReceptionCog(commands.Cog):
             customer_id=parent["customer_id"],
             staff_id=parent["staff_id"],
             staff_shares=json.dumps({str(k): v for k, v in shares.items()}) if len(shares) > 1 else None,
-            group_id=parent.get("group_id"),
+            co_customers=parent.get("co_customers"),
             services=service_keys,
             room=parent.get("room"),
             note=f"ต่อเวลาจากบิล #{parent_id}",

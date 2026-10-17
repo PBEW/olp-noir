@@ -202,6 +202,8 @@ class Database:
             "jobs": {
                 "staff_shares": "TEXT",                       # JSON {staff_id: บาท} บิลที่มีพนักงานหลายคน
                 "group_id": "INTEGER",                        # บิลที่เปิดพร้อมกันเป็นกลุ่ม (เลขบิลแรก)
+                "co_customers": "TEXT",                       # JSON list ลูกค้าคนอื่นในบิล (customer_id = คนจ่าย)
+                "backfilled": "INTEGER NOT NULL DEFAULT 0",   # 1 = คีย์บิลย้อนหลัง
             },
             "vip_orders": {
                 "seller_id": "INTEGER",                       # พนักงานที่แนะนำ (ได้ค่าคอม)
@@ -273,6 +275,15 @@ class Database:
         holders = ", ".join("?" for _ in statuses)
         rows = await self.fetchall(
             f"SELECT * FROM jobs WHERE status IN ({holders}) ORDER BY start_time", statuses
+        )
+        return [self._decode_job(row) for row in rows]
+
+    async def room_jobs_overlapping(self, room: str, start_iso: str, end_iso: str) -> list[dict]:
+        """บิลที่ใช้ห้องนี้ช่วงเวลาซ้อนกัน (ไม่นับบิลยกเลิก/บิลต่อเวลา เพราะบิลแม่ขยายเวลาให้แล้ว)"""
+        rows = await self.fetchall(
+            "SELECT * FROM jobs WHERE room = ? AND job_type = 'NORMAL' AND status != 'CANCELLED' "
+            "AND start_time < ? AND end_time > ? ORDER BY start_time",
+            (room, end_iso, start_iso),
         )
         return [self._decode_job(row) for row in rows]
 

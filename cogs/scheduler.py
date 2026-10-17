@@ -12,7 +12,7 @@ from discord.ext import commands, tasks
 from core.cycle import cycle_label, cycle_start_local, cycle_title, next_cutoff_local
 from core.sheets import month_title
 from core.embeds import COLOR_INFO, COLOR_OK, COLOR_WARN
-from core.pricing import job_shares, job_staff_ids, job_staff_mentions
+from core.pricing import job_customer_ids, job_shares, job_staff_ids, job_staff_mentions
 from core.utils import (
     discord_ts,
     display_name,
@@ -109,19 +109,20 @@ class SchedulerCog(commands.Cog):
                     color=COLOR_WARN,
                 ),
             )
-        await send_dm(
-            self.bot,
-            job["customer_id"],
-            embed=discord.Embed(
-                title=f"⏰ อีก {minutes} นาทีจะถึงเวลานัด",
-                description=(
-                    f"บิล `#{job['id']}` · พนักงาน {job_staff_mentions(job)}\n"
-                    f"ห้อง: {self.cfg.room_name(job.get('room'))}\n"
-                    f"เริ่ม {discord_ts(start)} เตรียมเข้าห้องได้แล้วค่ะ"
+        for cid in job_customer_ids(job):
+            await send_dm(
+                self.bot,
+                cid,
+                embed=discord.Embed(
+                    title=f"⏰ อีก {minutes} นาทีจะถึงเวลานัด",
+                    description=(
+                        f"บิล `#{job['id']}` · พนักงาน {job_staff_mentions(job)}\n"
+                        f"ห้อง: {self.cfg.room_name(job.get('room'))}\n"
+                        f"เริ่ม {discord_ts(start)} เตรียมเข้าห้องได้แล้วค่ะ"
+                    ),
+                    color=COLOR_WARN,
                 ),
-                color=COLOR_WARN,
-            ),
-        )
+            )
 
     async def _notify_end(self, job: dict, end: dt.datetime) -> None:
         minutes = self.cfg.before_end_minutes
@@ -135,7 +136,8 @@ class SchedulerCog(commands.Cog):
         )
         for sid in job_staff_ids(job):
             await send_dm(self.bot, sid, embed=embed)
-        await send_dm(self.bot, job["customer_id"], embed=embed)
+        for cid in job_customer_ids(job):
+            await send_dm(self.bot, cid, embed=embed)
 
     # ------------------------------------------------------------- Ticket
     async def check_tickets(self) -> None:
