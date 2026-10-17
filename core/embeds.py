@@ -5,7 +5,7 @@ import discord
 
 from .config import Config
 from .utils import discord_ts, from_iso, fmt_datetime, money
-from .pricing import job_staff_ids
+from .pricing import job_customer_ids, job_customer_mentions, job_staff_ids
 
 COLOR_MAIN = 0x2B2D31
 COLOR_INFO = 0x5865F2
@@ -70,7 +70,12 @@ def job_embed(cfg: Config, job: dict, *, title: str, color: int = COLOR_MAIN) ->
         value="⏱️ ต่อเวลา" if job["job_type"] == "EXTEND" else "🧾 บิลปกติ",
         inline=True,
     )
-    embed.add_field(name="ลูกค้า", value=f"<@{job['customer_id']}>", inline=True)
+    customers = job_customer_ids(job)
+    embed.add_field(
+        name="ลูกค้า" if len(customers) == 1 else f"ลูกค้า ({len(customers)} คน · 💳 = คนจ่าย)",
+        value=job_customer_mentions(job),
+        inline=True,
+    )
     staff_ids = job_staff_ids(job)
     embed.add_field(
         name="พนักงาน" if len(staff_ids) == 1 else f"พนักงาน ({len(staff_ids)} คน)",

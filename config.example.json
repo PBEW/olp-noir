@@ -123,7 +123,14 @@
         "desire": 109,
         "obsession": 109
       },
-      "staff_share": 49
+      "staff_share": 49,
+      "included_staff": 1,
+      "max_staff": 3,
+      "extra_staff_price": 49,
+      "extra_staff_percent": 100,
+      "max_customers": 2,
+      "extra_customer_price": 0,
+      "extra_customer_percent": 100
     },
     {
       "key": "room_vvip",
@@ -146,7 +153,14 @@
           "after_price": 169
         }
       },
-      "staff_share": 79
+      "staff_share": 79,
+      "included_staff": 1,
+      "max_staff": 3,
+      "extra_staff_price": 79,
+      "extra_staff_percent": 100,
+      "max_customers": 2,
+      "extra_customer_price": 0,
+      "extra_customer_percent": 100
     },
     {
       "key": "room_erp",
@@ -160,7 +174,14 @@
         "desire": 99,
         "obsession": 99
       },
-      "staff_share": 99
+      "staff_share": 99,
+      "included_staff": 1,
+      "max_staff": 3,
+      "extra_staff_price": 99,
+      "extra_staff_percent": 100,
+      "max_customers": 2,
+      "extra_customer_price": 0,
+      "extra_customer_percent": 100
     },
     {
       "key": "erp",
@@ -174,7 +195,14 @@
         "desire": 99,
         "obsession": 99
       },
-      "staff_share": 49
+      "staff_share": 49,
+      "included_staff": 1,
+      "max_staff": 3,
+      "extra_staff_price": 49,
+      "extra_staff_percent": 100,
+      "max_customers": 1,
+      "extra_customer_price": 0,
+      "extra_customer_percent": 100
     },
     {
       "key": "consult",
@@ -191,7 +219,14 @@
           "after_price": 69
         }
       },
-      "staff_share": 49
+      "staff_share": 49,
+      "included_staff": 1,
+      "max_staff": 3,
+      "extra_staff_price": 49,
+      "extra_staff_percent": 100,
+      "max_customers": 1,
+      "extra_customer_price": 0,
+      "extra_customer_percent": 100
     },
     {
       "key": "photo",
@@ -213,7 +248,14 @@
           "unlimited": true
         }
       },
-      "staff_share": 39
+      "staff_share": 39,
+      "included_staff": 1,
+      "max_staff": 3,
+      "extra_staff_price": 39,
+      "extra_staff_percent": 100,
+      "max_customers": 1,
+      "extra_customer_price": 0,
+      "extra_customer_percent": 100
     },
     {
       "key": "short_date",
@@ -236,7 +278,14 @@
           "after_price": 99
         }
       },
-      "staff_share": 49
+      "staff_share": 49,
+      "included_staff": 1,
+      "max_staff": 3,
+      "extra_staff_price": 49,
+      "extra_staff_percent": 100,
+      "max_customers": 1,
+      "extra_customer_price": 0,
+      "extra_customer_percent": 100
     },
     {
       "key": "extend_host",
@@ -265,7 +314,14 @@
         "desire": 50,
         "obsession": 50
       },
-      "staff_share": 50
+      "staff_share": 50,
+      "included_staff": 1,
+      "max_staff": 3,
+      "extra_staff_price": 50,
+      "extra_staff_percent": 100,
+      "max_customers": 1,
+      "extra_customer_price": 0,
+      "extra_customer_percent": 100
     },
     {
       "key": "tarot",
@@ -279,7 +335,14 @@
         "desire": 199,
         "obsession": 199
       },
-      "staff_share": 149
+      "staff_share": 149,
+      "included_staff": 1,
+      "max_staff": 3,
+      "extra_staff_price": 149,
+      "extra_staff_percent": 100,
+      "max_customers": 2,
+      "extra_customer_price": 0,
+      "extra_customer_percent": 100
     },
     {
       "key": "special_event",
@@ -293,7 +356,14 @@
         "lace": 59,
         "desire": 59,
         "obsession": 59
-      }
+      },
+      "included_staff": 1,
+      "max_staff": 3,
+      "extra_staff_price": 59,
+      "extra_staff_percent": 100,
+      "max_customers": 1,
+      "extra_customer_price": 0,
+      "extra_customer_percent": 100
     }
   ],
   "rooms": [
